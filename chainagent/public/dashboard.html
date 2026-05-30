@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ChainAgent — Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=JetBrains+Mono:wght@300;400;500&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=JetBrains+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -17,151 +17,183 @@
   --purple:#a78bfa;--purple-dim:rgba(167,139,250,0.1);
   --amber:#f59e0b;--amber-dim:rgba(245,158,11,0.1);
   --red:#ef4444;--red-dim:rgba(239,68,68,0.08);
-  --font-display:'Syne',sans-serif;
-  --font-mono:'JetBrains Mono',monospace;
-  --font-body:'DM Sans',sans-serif;
+  --font-display:'Syne',sans-serif;--font-mono:'JetBrains Mono',monospace;--font-body:'DM Sans',sans-serif;
 }
 html{scroll-behavior:smooth}
 body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-size:14px;line-height:1.6;overflow-x:hidden}
 body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(255,255,255,0.012) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.012) 1px,transparent 1px);background-size:56px 56px;pointer-events:none;z-index:0}
 
 /* NAV */
-nav{position:fixed;top:0;left:0;right:0;z-index:200;display:flex;align-items:center;justify-content:space-between;padding:0 32px;height:56px;border-bottom:1px solid var(--border);background:rgba(6,8,9,0.92);backdrop-filter:blur(16px)}
-.nav-left{display:flex;align-items:center;gap:24px}
-.nav-logo{font-family:var(--font-display);font-weight:800;font-size:16px;letter-spacing:-0.02em;color:var(--text);text-decoration:none;display:flex;align-items:center;gap:8px}
+nav{position:fixed;top:0;left:0;right:0;z-index:200;display:flex;align-items:center;justify-content:space-between;padding:0 24px;height:54px;border-bottom:1px solid var(--border);background:rgba(6,8,9,0.95);backdrop-filter:blur(16px)}
+.nav-logo{font-family:var(--font-display);font-weight:800;font-size:16px;letter-spacing:-0.02em;color:var(--text);text-decoration:none;display:flex;align-items:center;gap:8px;cursor:pointer}
 .nav-logo .live-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:pulse-dot 2s infinite}
-.nav-links{display:flex;gap:2px}
-.nav-link{font-family:var(--font-mono);font-size:11px;letter-spacing:0.04em;color:var(--muted);text-decoration:none;padding:6px 12px;border-radius:6px;transition:all 0.15s}
-.nav-link:hover,.nav-link.active{color:var(--text);background:var(--surface2)}
-.nav-link.active{color:var(--accent)}
-.nav-right{display:flex;align-items:center;gap:12px}
-.agent-status{display:flex;align-items:center;gap:7px;font-family:var(--font-mono);font-size:11px;color:var(--accent);background:var(--accent-dim);padding:5px 12px;border-radius:100px;border:1px solid var(--accent-mid)}
-.agent-status .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse-dot 1.5s infinite}
-.brand-tag{font-family:var(--font-mono);font-size:10px;color:var(--muted);background:var(--surface2);padding:4px 10px;border-radius:100px;border:1px solid var(--border2)}
+.nav-right{display:flex;align-items:center;gap:10px}
+.sync-indicator{display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:10px;color:var(--muted);padding:4px 10px;background:var(--surface2);border-radius:100px;border:1px solid var(--border)}
+.sync-indicator .sync-dot{width:5px;height:5px;border-radius:50%;background:var(--accent);animation:pulse-dot 3s infinite}
+.brand-switcher{display:flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:6px 12px;cursor:pointer;font-family:var(--font-mono);font-size:11px;color:var(--text);position:relative}
+.brand-switcher:hover{border-color:var(--accent-mid)}
+.brand-dropdown{position:absolute;top:calc(100% + 8px);right:0;background:var(--surface);border:1px solid var(--border2);border-radius:10px;min-width:200px;z-index:300;display:none;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.5)}
+.brand-dropdown.open{display:block}
+.brand-option{padding:10px 14px;font-family:var(--font-mono);font-size:11px;color:var(--muted2);cursor:pointer;transition:background 0.15s;display:flex;align-items:center;justify-content:space-between}
+.brand-option:hover{background:var(--surface2);color:var(--text)}
+.brand-option.active{color:var(--accent)}
+.brand-option .brand-sku-count{font-size:9px;color:var(--muted);background:var(--surface2);padding:2px 6px;border-radius:100px}
+.add-brand-btn{padding:10px 14px;font-family:var(--font-mono);font-size:11px;color:var(--accent);cursor:pointer;border-top:1px solid var(--border);transition:background 0.15s}
+.add-brand-btn:hover{background:var(--accent-dim)}
+.agent-status-pill{display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:10px;padding:5px 12px;border-radius:100px;border:1px solid var(--accent-mid);background:var(--accent-dim);color:var(--accent)}
+.agent-status-pill .dot{width:5px;height:5px;border-radius:50%;background:var(--accent);animation:pulse-dot 1.5s infinite}
+.schedule-badge{font-family:var(--font-mono);font-size:10px;color:var(--muted);background:var(--surface2);padding:4px 10px;border-radius:100px;border:1px solid var(--border);cursor:pointer}
+.schedule-badge:hover{border-color:var(--border2);color:var(--text)}
+.hamburger{display:none;flex-direction:column;gap:4px;cursor:pointer;padding:4px}
+.hamburger span{width:20px;height:2px;background:var(--muted2);border-radius:1px;transition:all 0.2s}
 
 /* LAYOUT */
-.layout{display:grid;grid-template-columns:220px 1fr;min-height:100vh;padding-top:56px;position:relative;z-index:1}
-
-/* SIDEBAR */
-.sidebar{border-right:1px solid var(--border);background:var(--surface);padding:24px 0;position:sticky;top:56px;height:calc(100vh - 56px);overflow-y:auto;display:flex;flex-direction:column}
-.sidebar-section{padding:0 16px;margin-bottom:28px}
-.sidebar-label{font-family:var(--font-mono);font-size:9px;letter-spacing:0.15em;color:var(--muted);text-transform:uppercase;padding:0 8px;margin-bottom:6px}
-.sidebar-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;transition:all 0.15s;color:var(--muted2);font-size:13px;border:none;background:none;width:100%;text-align:left}
+.layout{display:grid;grid-template-columns:220px 1fr;min-height:100vh;padding-top:54px;position:relative;z-index:1}
+.sidebar{border-right:1px solid var(--border);background:var(--surface);padding:20px 0;position:sticky;top:54px;height:calc(100vh - 54px);overflow-y:auto;display:flex;flex-direction:column;transition:transform 0.3s}
+.sidebar-section{padding:0 14px;margin-bottom:24px}
+.sidebar-label{font-family:var(--font-mono);font-size:9px;letter-spacing:0.15em;color:var(--muted);text-transform:uppercase;padding:0 8px;margin-bottom:5px}
+.sidebar-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;cursor:pointer;transition:all 0.15s;color:var(--muted2);font-size:13px;border:none;background:none;width:100%;text-align:left;position:relative}
 .sidebar-item:hover{background:var(--surface2);color:var(--text)}
 .sidebar-item.active{background:var(--accent-dim);color:var(--accent);border:1px solid var(--accent-mid)}
-.sidebar-icon{width:16px;text-align:center;flex-shrink:0;font-size:14px}
-.sidebar-badge{margin-left:auto;font-family:var(--font-mono);font-size:9px;background:var(--red-dim);color:var(--red);padding:2px 6px;border-radius:100px}
-.sidebar-badge.green{background:var(--accent-dim);color:var(--accent)}
-.sidebar-divider{height:1px;background:var(--border);margin:8px 16px}
-.sidebar-bottom{margin-top:auto;padding:16px}
-.sidebar-metric{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px}
-.sidebar-metric-val{font-family:var(--font-display);font-size:22px;font-weight:800;color:var(--text);letter-spacing:-0.02em}
+.sidebar-icon{width:15px;text-align:center;flex-shrink:0;font-size:13px}
+.sidebar-badge{margin-left:auto;font-family:var(--font-mono);font-size:9px;padding:2px 6px;border-radius:100px}
+.badge-red{background:var(--red-dim);color:var(--red)}
+.badge-green{background:var(--accent-dim);color:var(--accent)}
+.badge-amber{background:var(--amber-dim);color:var(--amber)}
+.sidebar-divider{height:1px;background:var(--border);margin:6px 14px}
+
+/* SCHEDULE WIDGET */
+.schedule-widget{margin:0 14px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:12px}
+.schedule-widget-title{font-family:var(--font-mono);font-size:9px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px}
+.schedule-next{font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--text);letter-spacing:-0.02em}
+.schedule-label{font-family:var(--font-mono);font-size:9px;color:var(--muted);margin-top:2px}
+.schedule-toggle{display:flex;align-items:center;justify-content:space-between;margin-top:10px}
+.schedule-toggle-label{font-size:11px;color:var(--muted2)}
+
+/* SIDEBAR BOTTOM */
+.sidebar-bottom{margin-top:auto;padding:14px}
+.sidebar-metric{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:11px;margin-bottom:8px}
+.sidebar-metric-val{font-family:var(--font-display);font-size:20px;font-weight:800;color:var(--text);letter-spacing:-0.02em}
 .sidebar-metric-label{font-family:var(--font-mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin-top:2px}
 
 /* MAIN */
-.main{padding:28px 32px;display:flex;flex-direction:column;gap:20px;overflow:hidden}
+.main{padding:24px 28px;display:flex;flex-direction:column;gap:18px;overflow:hidden}
 
-/* TOP METRICS */
+/* METRICS */
 .metrics-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
-.metric-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;transition:border-color 0.2s}
+.metric-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 18px;transition:border-color 0.2s;cursor:pointer}
 .metric-card:hover{border-color:var(--border2)}
 .metric-card.alert{border-color:rgba(239,68,68,0.3);background:var(--red-dim)}
 .metric-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px}
-.metric-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px}
+.metric-icon{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px}
 .metric-trend{font-family:var(--font-mono);font-size:10px;padding:2px 7px;border-radius:100px}
 .trend-up{background:var(--accent-dim);color:var(--accent)}
 .trend-down{background:var(--red-dim);color:var(--red)}
 .trend-neutral{background:var(--surface2);color:var(--muted)}
-.metric-val{font-family:var(--font-display);font-size:28px;font-weight:800;letter-spacing:-0.03em;color:var(--text);line-height:1}
+.metric-val{font-family:var(--font-display);font-size:26px;font-weight:800;letter-spacing:-0.03em;color:var(--text);line-height:1}
 .metric-val.red{color:var(--red)}
-.metric-label{font-family:var(--font-mono);font-size:10px;color:var(--muted);margin-top:4px;letter-spacing:0.05em}
+.metric-label{font-family:var(--font-mono);font-size:9px;color:var(--muted);margin-top:4px;letter-spacing:0.05em}
 
-/* SKU TABLE */
+/* PANELS */
 .panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden}
-.panel-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);background:var(--surface2)}
-.panel-title{font-family:var(--font-display);font-size:14px;font-weight:700;letter-spacing:-0.01em;display:flex;align-items:center;gap:8px}
-.panel-actions{display:flex;gap:8px;align-items:center}
-.btn{font-family:var(--font-mono);font-size:11px;font-weight:500;letter-spacing:0.04em;padding:7px 14px;border-radius:7px;border:none;cursor:pointer;transition:all 0.15s;display:inline-flex;align-items:center;gap:6px}
+.panel-header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);background:var(--surface2)}
+.panel-title{font-family:var(--font-display);font-size:13px;font-weight:700;letter-spacing:-0.01em;display:flex;align-items:center;gap:7px}
+.panel-actions{display:flex;gap:7px;align-items:center}
+
+/* BUTTONS */
+.btn{font-family:var(--font-mono);font-size:11px;font-weight:500;letter-spacing:0.04em;padding:7px 13px;border-radius:7px;border:none;cursor:pointer;transition:all 0.15s;display:inline-flex;align-items:center;gap:5px}
 .btn-primary{background:var(--accent);color:#060809}
 .btn-primary:hover{opacity:0.88;transform:translateY(-1px)}
 .btn-primary:disabled{opacity:0.4;cursor:not-allowed;transform:none}
 .btn-ghost{background:var(--surface);color:var(--muted2);border:1px solid var(--border2)}
 .btn-ghost:hover{background:var(--surface2);color:var(--text)}
 .btn-danger{background:var(--red-dim);color:var(--red);border:1px solid rgba(239,68,68,0.2)}
-.btn-danger:hover{background:rgba(239,68,68,0.15)}
 .btn-approve{background:var(--accent);color:#060809;font-size:12px;padding:9px 20px}
 .btn-approve:hover{opacity:0.88}
-.btn-edit{background:var(--surface2);color:var(--muted2);border:1px solid var(--border2);font-size:12px;padding:9px 18px}
+.btn-edit-sm{background:var(--surface2);color:var(--muted2);border:1px solid var(--border2);font-size:12px;padding:9px 18px;font-family:var(--font-mono);border-radius:7px;cursor:pointer}
 .btn-cancel-sm{background:none;color:var(--muted);border:none;font-size:12px;padding:9px 14px;cursor:pointer;font-family:var(--font-mono)}
 
-.sku-table-head{display:grid;grid-template-columns:2fr 80px 90px 80px 90px 100px 110px;padding:10px 20px;border-bottom:1px solid var(--border)}
+/* SKU TABLE */
+.sku-table-head{display:grid;grid-template-columns:2fr 70px 80px 80px 110px 95px 105px;padding:9px 18px;border-bottom:1px solid var(--border)}
 .sku-th{font-family:var(--font-mono);font-size:9px;letter-spacing:0.12em;color:var(--muted);text-transform:uppercase}
-.sku-row{display:grid;grid-template-columns:2fr 80px 90px 80px 90px 100px 110px;padding:14px 20px;border-bottom:1px solid var(--border);align-items:center;transition:background 0.15s;cursor:pointer}
+.sku-row{display:grid;grid-template-columns:2fr 70px 80px 80px 110px 95px 105px;padding:13px 18px;border-bottom:1px solid var(--border);align-items:center;transition:background 0.15s;cursor:pointer}
 .sku-row:last-child{border-bottom:none}
 .sku-row:hover{background:var(--surface2)}
 .sku-row.critical{background:rgba(239,68,68,0.03)}
-.sku-row.critical:hover{background:rgba(239,68,68,0.06)}
 .sku-name{font-size:13px;font-weight:500;color:var(--text)}
 .sku-id{font-family:var(--font-mono);font-size:9px;color:var(--muted);margin-top:2px}
 .sku-cell{font-family:var(--font-mono);font-size:12px;color:var(--text)}
 .sku-cell.dim{color:var(--muted2)}
 .sku-cell.red{color:var(--red);font-weight:500}
 .sku-cell.amber{color:var(--amber)}
-.risk-pill{font-family:var(--font-mono);font-size:10px;font-weight:500;padding:3px 9px;border-radius:4px;display:inline-block}
+.risk-pill{font-family:var(--font-mono);font-size:10px;font-weight:500;padding:3px 8px;border-radius:4px;display:inline-block}
 .risk-ok{background:rgba(34,197,94,0.12);color:#4ade80}
 .risk-watch{background:var(--amber-dim);color:var(--amber)}
 .risk-critical{background:var(--red-dim);color:var(--red);animation:flicker 2s infinite}
 .agent-active{font-family:var(--font-mono);font-size:10px;color:var(--accent);display:flex;align-items:center;gap:5px}
 .agent-active .dot{width:5px;height:5px;border-radius:50%;background:var(--accent);animation:pulse-dot 1.5s infinite}
 
-/* GRID 2 COL */
-.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+/* HISTORY CHART */
+.history-bars{display:flex;align-items:flex-end;gap:3px;height:28px;margin-top:6px}
+.h-bar{flex:1;border-radius:2px 2px 0 0;transition:height 0.3s;cursor:pointer;position:relative}
+.h-bar:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);background:var(--surface3);color:var(--text);font-family:var(--font-mono);font-size:9px;padding:3px 6px;border-radius:4px;white-space:nowrap;border:1px solid var(--border2)}
+
+/* GRIDS */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
 .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
 
-/* TERMINAL / TRACE */
+/* TERMINAL */
 .terminal{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden}
-.terminal-header{display:flex;align-items:center;gap:8px;padding:12px 18px;border-bottom:1px solid var(--border);background:var(--surface2)}
-.t-dot{width:10px;height:10px;border-radius:50%}
+.terminal-header{display:flex;align-items:center;gap:7px;padding:11px 16px;border-bottom:1px solid var(--border);background:var(--surface2)}
+.t-dot{width:9px;height:9px;border-radius:50%}
 .t-red{background:#ef4444}.t-yellow{background:#f59e0b}.t-green{background:#22c55e}
-.t-title{font-family:var(--font-mono);font-size:10px;color:var(--muted);margin-left:8px}
+.t-title{font-family:var(--font-mono);font-size:10px;color:var(--muted);margin-left:6px}
 .t-live{margin-left:auto;display:flex;align-items:center;gap:5px;font-family:var(--font-mono);font-size:10px;color:var(--accent)}
 .t-live .dot{width:5px;height:5px;border-radius:50%;background:var(--accent);animation:pulse-dot 1.5s infinite}
-.trace-body{padding:16px 20px;max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:1px}
-.trace-line{display:flex;gap:10px;align-items:flex-start;font-family:var(--font-mono);font-size:11px;line-height:1.7;animation:fadeIn 0.3s both}
+.trace-body{padding:14px 18px;max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:1px}
+.trace-line{display:flex;gap:9px;align-items:flex-start;font-family:var(--font-mono);font-size:11px;line-height:1.7;animation:fadeIn 0.3s both}
 .trace-time{color:var(--muted);flex-shrink:0;font-size:10px;padding-top:1px}
-.trace-tag{font-size:9px;font-weight:500;padding:2px 7px;border-radius:3px;flex-shrink:0;min-width:50px;text-align:center;margin-top:2px}
+.trace-tag{font-size:9px;font-weight:500;padding:2px 6px;border-radius:3px;flex-shrink:0;min-width:48px;text-align:center;margin-top:2px}
 .tag-watch{background:var(--blue-dim);color:var(--blue)}
 .tag-think{background:var(--purple-dim);color:var(--purple)}
 .tag-act{background:var(--accent-dim);color:var(--accent)}
 .tag-risk{background:var(--red-dim);color:var(--red)}
 .tag-alert{background:var(--amber-dim);color:var(--amber)}
-.trace-msg{color:var(--text)}
+.tag-reply{background:rgba(34,197,94,0.12);color:#4ade80}
 .trace-hi{color:var(--accent)}
 .trace-warn{color:var(--amber)}
 .trace-dim{color:var(--muted2)}
 .trace-danger{color:var(--red)}
-.trace-divider{height:1px;background:var(--border);margin:8px 0}
-.trace-cursor{color:var(--muted);animation:blink 1s infinite;font-size:13px}
 
-/* EMAIL PANEL */
+/* EMAIL */
 .email-panel{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:14px;overflow:hidden;animation:slideUp 0.4s both}
-.email-header{padding:16px 20px;border-bottom:1px solid var(--border);background:var(--surface2)}
-.email-fields{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
-.email-field{display:flex;gap:12px;align-items:flex-start;font-family:var(--font-mono);font-size:12px}
-.email-field-label{color:var(--muted);min-width:60px;flex-shrink:0}
+.email-header{padding:14px 18px;border-bottom:1px solid var(--border);background:var(--surface2)}
+.email-fields{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:7px}
+.email-field{display:flex;gap:10px;align-items:flex-start;font-family:var(--font-mono);font-size:12px}
+.email-field-label{color:var(--muted);min-width:58px;flex-shrink:0}
 .email-field-val{color:var(--text)}
-.email-field-val.editable{background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:4px 10px;outline:none;color:var(--text);font-family:var(--font-mono);font-size:12px;width:100%;transition:border-color 0.2s}
-.email-field-val.editable:focus{border-color:var(--accent)}
-.email-body-area{padding:16px 20px;border-bottom:1px solid var(--border)}
-.email-body-text{font-family:var(--font-mono);font-size:11px;line-height:1.9;color:var(--text);background:var(--surface2);border-radius:8px;padding:14px 16px;white-space:pre-wrap}
-.email-body-text.editable-area{border:1px solid var(--border2);outline:none;width:100%;resize:vertical;min-height:120px;transition:border-color 0.2s}
-.email-body-text.editable-area:focus{border-color:var(--accent)}
+.email-body-area{padding:14px 18px;border-bottom:1px solid var(--border)}
+.email-body-text{font-family:var(--font-mono);font-size:11px;line-height:1.9;color:var(--text);background:var(--surface2);border-radius:8px;padding:12px 14px;white-space:pre-wrap}
 .email-accent{color:var(--accent)}
-.email-actions{padding:14px 20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.countdown-timer{margin-left:auto;font-family:var(--font-mono);font-size:11px;color:var(--amber);display:flex;align-items:center;gap:6px}
+.email-actions{padding:12px 18px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.countdown-timer{margin-left:auto;font-family:var(--font-mono);font-size:11px;color:var(--amber);display:flex;align-items:center;gap:5px}
+
+/* SUPPLIER REPLY */
+.supplier-reply{background:var(--surface2);border:1px solid rgba(34,197,94,0.2);border-left:3px solid #4ade80;border-radius:10px;padding:14px 16px;margin:14px 18px;animation:slideUp 0.4s both}
+.reply-header{font-family:var(--font-mono);font-size:10px;color:#4ade80;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.reply-body{font-family:var(--font-mono);font-size:11px;color:var(--text);line-height:1.7}
+
+/* NOTIFICATION PREVIEW */
+.notif-preview{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.notif-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.notif-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px}
+.notif-title{font-size:12px;font-weight:500;color:var(--text)}
+.notif-sub{font-family:var(--font-mono);font-size:10px;color:var(--muted)}
+.notif-body{font-size:11px;color:var(--muted2);line-height:1.6;border-top:1px solid var(--border);padding-top:8px}
 
 /* AUDIT LOG */
-.audit-row{display:grid;grid-template-columns:100px 1fr 90px 80px;gap:12px;padding:10px 20px;border-bottom:1px solid var(--border);align-items:center;font-size:12px}
+.audit-row{display:grid;grid-template-columns:100px 1fr 90px 80px;gap:10px;padding:10px 18px;border-bottom:1px solid var(--border);align-items:center;font-size:12px;transition:background 0.15s;cursor:pointer}
+.audit-row:hover{background:var(--surface2)}
 .audit-row:last-child{border-bottom:none}
 .audit-time{font-family:var(--font-mono);font-size:10px;color:var(--muted)}
 .audit-action{color:var(--text)}
@@ -171,50 +203,73 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;display:flex;align-items:cen
 .status-pending{background:var(--amber-dim);color:var(--amber)}
 .status-cancelled{background:var(--surface2);color:var(--muted)}
 
-/* SPARK CHARTS */
-.spark{display:flex;align-items:flex-end;gap:2px;height:32px}
-.spark-bar{flex:1;border-radius:2px 2px 0 0;background:var(--accent-dim);transition:height 0.3s}
+/* SPARK */
+.spark{display:flex;align-items:flex-end;gap:2px;height:28px}
+.spark-bar{flex:1;border-radius:2px 2px 0 0;background:var(--accent-dim)}
 .spark-bar.hi{background:var(--accent)}
 .spark-bar.red{background:var(--red-dim)}
 .spark-bar.red.hi{background:var(--red)}
 
-/* SETTINGS PANEL */
-.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:20px}
-.setting-row{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--surface2);border-radius:10px;border:1px solid var(--border)}
+/* SETTINGS */
+.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:18px}
+.setting-row{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;background:var(--surface2);border-radius:10px;border:1px solid var(--border)}
 .setting-label{font-size:13px;color:var(--text)}
 .setting-sub{font-family:var(--font-mono);font-size:10px;color:var(--muted);margin-top:2px}
-.toggle{width:40px;height:22px;border-radius:100px;border:none;cursor:pointer;position:relative;transition:background 0.2s}
+.toggle{width:38px;height:20px;border-radius:100px;border:none;cursor:pointer;position:relative;transition:background 0.2s}
 .toggle.on{background:var(--accent)}
 .toggle.off{background:var(--surface3)}
-.toggle::after{content:'';position:absolute;top:3px;width:16px;height:16px;border-radius:50%;background:white;transition:left 0.2s}
-.toggle.on::after{left:21px}
-.toggle.off::after{left:3px}
-.input-field{background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:6px 10px;color:var(--text);font-family:var(--font-mono);font-size:11px;outline:none;transition:border-color 0.2s;width:100px}
+.toggle::after{content:'';position:absolute;top:2px;width:16px;height:16px;border-radius:50%;background:white;transition:left 0.2s}
+.toggle.on::after{left:20px}
+.toggle.off::after{left:2px}
+.input-field{background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:5px 9px;color:var(--text);font-family:var(--font-mono);font-size:11px;outline:none;transition:border-color 0.2s;width:90px}
 .input-field:focus{border-color:var(--accent)}
 
-/* SUPPLIER CARD */
-.supplier-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+/* SUPPLIER CARDS */
+.supplier-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;transition:border-color 0.2s;cursor:pointer}
+.supplier-card:hover{border-color:var(--border2)}
 .supplier-name{font-size:13px;font-weight:500;color:var(--text);margin-bottom:4px}
 .supplier-detail{font-family:var(--font-mono);font-size:10px;color:var(--muted);line-height:1.7}
-.supplier-status{display:inline-flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:10px;color:var(--accent);margin-top:6px}
+.supplier-status{display:inline-flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:10px;margin-top:6px}
+
+/* ONBOARDING */
+.onboarding-step{display:none}
+.onboarding-step.active{display:flex;flex-direction:column;gap:16px}
+.step-indicator{display:flex;gap:8px;margin-bottom:4px}
+.step-dot{width:8px;height:8px;border-radius:50%;background:var(--border2);transition:background 0.2s}
+.step-dot.done{background:var(--accent)}
+.wizard-input{background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 13px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;width:100%;transition:border-color 0.2s}
+.wizard-input:focus{border-color:var(--accent)}
 
 /* MODAL */
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);z-index:500;display:flex;align-items:center;justify-content:center;animation:fadeIn 0.2s both}
-.modal{background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:28px;max-width:480px;width:90%;animation:slideUp 0.3s both}
-.modal-title{font-family:var(--font-display);font-size:18px;font-weight:700;margin-bottom:8px;letter-spacing:-0.02em}
-.modal-sub{font-size:13px;color:var(--muted2);margin-bottom:20px;line-height:1.6}
-.modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:24px}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.75);backdrop-filter:blur(6px);z-index:500;display:flex;align-items:center;justify-content:center;animation:fadeIn 0.2s both}
+.modal{background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:26px;max-width:480px;width:90%;animation:slideUp 0.3s both}
+.modal-title{font-family:var(--font-display);font-size:17px;font-weight:700;margin-bottom:6px;letter-spacing:-0.02em}
+.modal-sub{font-size:13px;color:var(--muted2);margin-bottom:18px;line-height:1.6}
+.modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:22px}
 
 /* TOAST */
-.toast{position:fixed;bottom:24px;right:24px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:12px 18px;font-family:var(--font-mono);font-size:12px;color:var(--text);z-index:600;display:flex;align-items:center;gap:10px;animation:slideUp 0.3s both;box-shadow:0 8px 32px rgba(0,0,0,0.4)}
+.toast{position:fixed;bottom:22px;right:22px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:11px 16px;font-family:var(--font-mono);font-size:12px;color:var(--text);z-index:600;display:flex;align-items:center;gap:9px;animation:slideUp 0.3s both;box-shadow:0 8px 32px rgba(0,0,0,0.4)}
 .toast.success{border-color:var(--accent-mid)}
-.toast.success .toast-icon{color:var(--accent)}
 .toast.error{border-color:rgba(239,68,68,0.3)}
-.toast.error .toast-icon{color:var(--red)}
 
-/* PAGE SECTIONS */
+/* BACKEND HOOK INDICATOR */
+.backend-hook{display:inline-flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:9px;color:var(--blue);background:var(--blue-dim);padding:2px 7px;border-radius:4px;margin-left:8px}
+
+/* SECTIONS */
 .section{display:none}
-.section.active{display:flex;flex-direction:column;gap:20px}
+.section.active{display:flex;flex-direction:column;gap:18px}
+
+/* RESPONSIVE */
+@media(max-width:900px){
+  .layout{grid-template-columns:1fr}
+  .sidebar{position:fixed;left:0;top:54px;bottom:0;z-index:150;transform:translateX(-100%);width:240px}
+  .sidebar.open{transform:translateX(0)}
+  .hamburger{display:flex}
+  .metrics-row{grid-template-columns:1fr 1fr}
+  .grid-2{grid-template-columns:1fr}
+  .sku-table-head{display:none}
+  .sku-row{grid-template-columns:1fr 1fr;gap:6px}
+}
 
 /* ANIMS */
 @keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.3;transform:scale(0.7)}}
@@ -222,8 +277,6 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;display:flex;align-items:cen
 @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 @keyframes slideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
-@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
-
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:2px}
@@ -233,205 +286,185 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;display:flex;align-items:cen
 
 <!-- NAV -->
 <nav>
-  <div class="nav-left">
-    <a href="index.html" class="nav-logo">
-      <span class="live-dot"></span>
-      ChainAgent
-    </a>
-    <div class="nav-links">
-      <a class="nav-link active" onclick="showSection('overview')">Overview</a>
-      <a class="nav-link" onclick="showSection('agent')">Agent</a>
-      <a class="nav-link" onclick="showSection('inventory')">Inventory</a>
-      <a class="nav-link" onclick="showSection('suppliers')">Suppliers</a>
-      <a class="nav-link" onclick="showSection('logs')">Audit Log</a>
-      <a class="nav-link" onclick="showSection('settings')">Settings</a>
+  <div style="display:flex;align-items:center;gap:16px">
+    <div class="hamburger" onclick="toggleSidebar()" id="hamburger">
+      <span></span><span></span><span></span>
     </div>
+    <a class="nav-logo" onclick="showSection('overview')">
+      <span class="live-dot"></span>ChainAgent
+    </a>
   </div>
   <div class="nav-right">
-    <span class="brand-tag">brand: Lense</span>
-    <div class="agent-status">
-      <span class="dot"></span>
-      Agent ready
+    <div class="sync-indicator" id="syncIndicator">
+      <span class="sync-dot"></span>
+      <span id="syncText">synced just now</span>
     </div>
+    <div class="brand-switcher" onclick="toggleBrandDropdown()" id="brandSwitcher">
+      <span>🏷</span>
+      <span id="currentBrandLabel">brand: Focal</span>
+      <span style="color:var(--muted);font-size:10px">▾</span>
+      <div class="brand-dropdown" id="brandDropdown">
+        <div class="brand-option active" onclick="switchBrand('focal','Focal',event)">Focal Eyewear<span class="brand-sku-count">3 SKUs</span></div>
+        <div class="brand-option" onclick="switchBrand('lens','LensLab Co.',event)">LensLab Co.<span class="brand-sku-count">2 SKUs</span></div>
+        <div class="brand-option" onclick="switchBrand('arc','Arc Vision',event)">Arc Vision<span class="brand-sku-count">4 SKUs</span></div>
+        <div class="add-brand-btn" onclick="showAddBrandModal(event)">+ Add new brand</div>
+      </div>
+    </div>
+    <div class="schedule-badge" onclick="showSection('settings')" id="nextRunBadge">Next run: <span id="nextRunTimer">02:00:00</span></div>
+    <div class="agent-status-pill"><span class="dot"></span>Agent ready</div>
   </div>
 </nav>
 
 <div class="layout">
 
   <!-- SIDEBAR -->
-  <aside class="sidebar">
+  <aside class="sidebar" id="sidebar">
     <div class="sidebar-section">
       <div class="sidebar-label">Monitor</div>
-      <button class="sidebar-item active" onclick="showSection('overview')"><span class="sidebar-icon">◈</span>Overview</button>
-      <button class="sidebar-item" onclick="showSection('agent')"><span class="sidebar-icon">⚡</span>Run Agent<span class="sidebar-badge">1 alert</span></button>
-      <button class="sidebar-item" onclick="showSection('inventory')"><span class="sidebar-icon">◫</span>Inventory</button>
+      <button class="sidebar-item active" onclick="showSection('overview')" id="nav-overview"><span class="sidebar-icon">◈</span>Overview</button>
+      <button class="sidebar-item" onclick="showSection('agent')" id="nav-agent"><span class="sidebar-icon">⚡</span>Run Agent<span class="sidebar-badge badge-red" id="alertBadge">1 alert</span></button>
+      <button class="sidebar-item" onclick="showSection('inventory')" id="nav-inventory"><span class="sidebar-icon">◫</span>Inventory</button>
     </div>
     <div class="sidebar-divider"></div>
     <div class="sidebar-section">
       <div class="sidebar-label">Manage</div>
-      <button class="sidebar-item" onclick="showSection('suppliers')"><span class="sidebar-icon">◉</span>Suppliers</button>
-      <button class="sidebar-item" onclick="showSection('logs')"><span class="sidebar-icon">≡</span>Audit Log<span class="sidebar-badge green">3</span></button>
-      <button class="sidebar-item" onclick="showSection('settings')"><span class="sidebar-icon">◎</span>Settings</button>
+      <button class="sidebar-item" onclick="showSection('suppliers')" id="nav-suppliers"><span class="sidebar-icon">◉</span>Suppliers</button>
+      <button class="sidebar-item" onclick="showSection('logs')" id="nav-logs"><span class="sidebar-icon">≡</span>Audit Log<span class="sidebar-badge badge-green" id="logBadge">3</span></button>
+      <button class="sidebar-item" onclick="showSection('notifications')" id="nav-notifications"><span class="sidebar-icon">🔔</span>Notifications<span class="sidebar-badge badge-amber">New</span></button>
+      <button class="sidebar-item" onclick="showSection('settings')" id="nav-settings"><span class="sidebar-icon">◎</span>Settings</button>
     </div>
     <div class="sidebar-divider"></div>
+
+    <!-- SCHEDULE WIDGET -->
+    <div class="schedule-widget">
+      <div class="schedule-widget-title">Agent Schedule</div>
+      <div class="schedule-next" id="scheduleCountdown">02:00:00</div>
+      <div class="schedule-label">until next auto-run</div>
+      <div class="schedule-toggle">
+        <span class="schedule-toggle-label">Auto-run</span>
+        <button class="toggle on" onclick="toggleSetting(this);toggleSchedule(this)"></button>
+      </div>
+    </div>
+
     <div class="sidebar-bottom">
-      <div class="sidebar-metric">
-        <div class="sidebar-metric-val" id="side-days">8.9</div>
+      <div class="sidebar-metric" style="border-color:rgba(239,68,68,0.2);background:var(--red-dim)">
+        <div class="sidebar-metric-val" style="color:var(--red)" id="side-days">8.9</div>
         <div class="sidebar-metric-label">DAYS TO STOCKOUT</div>
       </div>
-      <div class="sidebar-metric" style="border-color:rgba(239,68,68,0.2);background:var(--red-dim)">
-        <div class="sidebar-metric-val" style="color:var(--red)">1</div>
-        <div class="sidebar-metric-label">CRITICAL SKUs</div>
+      <div class="sidebar-metric">
+        <div class="sidebar-metric-val" id="side-actions">3</div>
+        <div class="sidebar-metric-label">ACTIONS THIS WEEK</div>
       </div>
     </div>
   </aside>
 
-  <!-- MAIN CONTENT -->
   <main class="main">
 
-    <!-- ══════ OVERVIEW ══════ -->
+    <!-- ══ OVERVIEW ══ -->
     <div id="section-overview" class="section active">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:3px">// overview · <span id="overview-brand-label">Focal Eyewear</span></div>
+          <h2 style="font-family:var(--font-display);font-size:22px;font-weight:800;letter-spacing:-0.03em">Supply Chain Dashboard</h2>
+        </div>
+        <button class="btn btn-primary" onclick="showSection('agent');setTimeout(startAgent,200)">▶ Run Agent Now</button>
+      </div>
 
-      <!-- Metrics -->
       <div class="metrics-row">
         <div class="metric-card alert">
-          <div class="metric-top">
-            <div class="metric-icon" style="background:var(--red-dim)">🚨</div>
-            <span class="metric-trend trend-down">Critical</span>
-          </div>
-          <div class="metric-val red">8.9</div>
-          <div class="metric-label">DAYS TO STOCKOUT · LENSE DROP 001</div>
+          <div class="metric-top"><div class="metric-icon" style="background:var(--red-dim)">🚨</div><span class="metric-trend trend-down">Critical</span></div>
+          <div class="metric-val red" id="m-days">8.9</div>
+          <div class="metric-label">DAYS TO STOCKOUT · <span id="m-critical-sku">FOCAL ARC FRAME</span></div>
         </div>
         <div class="metric-card">
-          <div class="metric-top">
-            <div class="metric-icon" style="background:var(--accent-dim)">📦</div>
-            <span class="metric-trend trend-up">+12% WoW</span>
-          </div>
-          <div class="metric-val">3,614</div>
+          <div class="metric-top"><div class="metric-icon" style="background:var(--accent-dim)">📦</div><span class="metric-trend trend-up">+12% WoW</span></div>
+          <div class="metric-val" id="m-stock">3,614</div>
           <div class="metric-label">TOTAL UNITS IN STOCK</div>
         </div>
         <div class="metric-card">
-          <div class="metric-top">
-            <div class="metric-icon" style="background:var(--blue-dim)">⚡</div>
-            <span class="metric-trend trend-up">Active</span>
-          </div>
-          <div class="metric-val">126</div>
-          <div class="metric-label">UNITS SOLD TODAY</div>
+          <div class="metric-top"><div class="metric-icon" style="background:var(--blue-dim)">📥</div><span class="metric-trend trend-neutral">En route</span></div>
+          <div class="metric-val">800</div>
+          <div class="metric-label">UNITS INCOMING</div>
         </div>
         <div class="metric-card">
-          <div class="metric-top">
-            <div class="metric-icon" style="background:var(--purple-dim)">✓</div>
-            <span class="metric-trend trend-neutral">This week</span>
-          </div>
-          <div class="metric-val">3</div>
+          <div class="metric-top"><div class="metric-icon" style="background:var(--purple-dim)">✓</div><span class="metric-trend trend-neutral">This week</span></div>
+          <div class="metric-val" id="m-actions">3</div>
           <div class="metric-label">AGENT ACTIONS TAKEN</div>
         </div>
       </div>
 
-      <!-- SKU Table + Spark Charts -->
       <div class="panel">
         <div class="panel-header">
-          <div class="panel-title">📊 Live SKU Risk Monitor</div>
+          <div class="panel-title">📊 Live SKU Risk Monitor <span class="backend-hook">← /api/inventory</span></div>
           <div class="panel-actions">
             <button class="btn btn-ghost" onclick="refreshTable()">↻ Refresh</button>
             <button class="btn btn-primary" onclick="showSection('agent');setTimeout(startAgent,200)">▶ Run Agent</button>
           </div>
         </div>
         <div class="sku-table-head">
-          <div class="sku-th">Product</div>
-          <div class="sku-th">Stock</div>
-          <div class="sku-th">Velocity</div>
-          <div class="sku-th">Days Left</div>
-          <div class="sku-th">Risk Score</div>
-          <div class="sku-th">Risk</div>
-          <div class="sku-th">Agent</div>
+          <div class="sku-th">Product</div><div class="sku-th">Stock</div><div class="sku-th">Incoming</div><div class="sku-th">Velocity</div>
+          <div class="sku-th">Runway</div><div class="sku-th">Risk</div><div class="sku-th">Agent</div>
         </div>
-        <div class="sku-row" onclick="openSkuModal('lense5to9')">
-          <div><div class="sku-name">Lense 5to9</div><div class="sku-id">DHOD5-EC999002</div></div>
-          <div class="sku-cell">1,592</div>
-          <div class="sku-cell">47/day</div>
-          <div class="sku-cell">33.9</div>
-          <div class="sku-cell">
-            <div class="spark">
-              <div class="spark-bar" style="height:30%"></div><div class="spark-bar" style="height:40%"></div>
-              <div class="spark-bar" style="height:35%"></div><div class="spark-bar" style="height:50%"></div>
-              <div class="spark-bar" style="height:45%"></div><div class="spark-bar hi" style="height:60%"></div>
-            </div>
+        <div id="skuTableBody">
+          <div id="skuTableBody"><div class="sku-row" onclick="openSkuModal('slim01')">
+            <div><div class="sku-name">Focal Slim 01</div><div class="sku-id">FOCL-EC999001</div></div>
+            <div class="sku-cell">1,592</div><div class="sku-cell">47/day</div><div class="sku-cell">33.9</div>
+            <div class="sku-cell"><div class="spark"><div class="spark-bar" style="height:30%"></div><div class="spark-bar" style="height:40%"></div><div class="spark-bar" style="height:35%"></div><div class="spark-bar" style="height:50%"></div><div class="spark-bar" style="height:45%"></div><div class="spark-bar hi" style="height:60%"></div></div></div>
+            <div class="sku-cell"><span class="risk-pill risk-ok">Healthy</span></div>
+            <div class="sku-cell dim">Monitoring</div>
           </div>
-          <div class="sku-cell"><span class="risk-pill risk-ok">Healthy</span></div>
-          <div class="sku-cell dim">Monitoring</div>
-        </div>
-        <div class="sku-row critical" onclick="openSkuModal('lensedrop001')">
-          <div><div class="sku-name">Lense Drop 001</div><div class="sku-id">DHOD5-EC999009</div></div>
-          <div class="sku-cell">428</div>
-          <div class="sku-cell">48/day</div>
-          <div class="sku-cell red">8.9</div>
-          <div class="sku-cell">
-            <div class="spark">
-              <div class="spark-bar red" style="height:40%"></div><div class="spark-bar red" style="height:55%"></div>
-              <div class="spark-bar red" style="height:70%"></div><div class="spark-bar red" style="height:80%"></div>
-              <div class="spark-bar red" style="height:90%"></div><div class="spark-bar red hi" style="height:100%"></div>
-            </div>
+          <div class="sku-row critical" onclick="openSkuModal('arcframe')">
+            <div><div class="sku-name">Focal Arc Frame</div><div class="sku-id">FOCL-EC999002</div></div>
+            <div class="sku-cell">428</div><div class="sku-cell">48/day</div><div class="sku-cell red">8.9</div>
+            <div class="sku-cell"><div class="spark"><div class="spark-bar red" style="height:40%"></div><div class="spark-bar red" style="height:55%"></div><div class="spark-bar red" style="height:70%"></div><div class="spark-bar red" style="height:82%"></div><div class="spark-bar red" style="height:92%"></div><div class="spark-bar red hi" style="height:100%"></div></div></div>
+            <div class="sku-cell"><span class="risk-pill risk-critical">Critical</span></div>
+            <div class="sku-cell"><div class="agent-active" id="agentActiveBadge" style="display:none"><span class="dot"></span>Acting</div><span id="agentIdleBadge" class="dim" style="font-family:var(--font-mono);font-size:10px">—</span></div>
           </div>
-          <div class="sku-cell"><span class="risk-pill risk-critical">Critical</span></div>
-          <div class="sku-cell"><div class="agent-active" id="agentActiveBadge" style="display:none"><span class="dot"></span>Acting now</div><span id="agentIdleBadge" style="font-family:var(--font-mono);font-size:10px;color:var(--muted)">—</span></div>
-        </div>
-        <div class="sku-row" onclick="openSkuModal('lensedrop001y')">
-          <div><div class="sku-name">Lense Drop 001 Yellow</div><div class="sku-id">DHOD5-EC999003</div></div>
-          <div class="sku-cell">1,594</div>
-          <div class="sku-cell">31/day</div>
-          <div class="sku-cell amber">21.0</div>
-          <div class="sku-cell">
-            <div class="spark">
-              <div class="spark-bar" style="height:20%"></div><div class="spark-bar" style="height:30%"></div>
-              <div class="spark-bar" style="height:28%"></div><div class="spark-bar" style="height:35%"></div>
-              <div class="spark-bar" style="height:40%"></div><div class="spark-bar hi" style="height:45%"></div>
-            </div>
+          <div class="sku-row" onclick="openSkuModal('round03')">
+            <div><div class="sku-name">Focal Round 03</div><div class="sku-id">FOCL-EC999003</div></div>
+            <div class="sku-cell">1,594</div><div class="sku-cell">31/day</div><div class="sku-cell amber">21.0</div>
+            <div class="sku-cell"><div class="spark"><div class="spark-bar" style="height:20%"></div><div class="spark-bar" style="height:30%"></div><div class="spark-bar" style="height:28%"></div><div class="spark-bar" style="height:35%"></div><div class="spark-bar" style="height:40%"></div><div class="spark-bar hi" style="height:45%"></div></div></div>
+            <div class="sku-cell"><span class="risk-pill risk-watch">Watch</span></div>
+            <div class="sku-cell dim">Monitoring</div>
           </div>
-          <div class="sku-cell"><span class="risk-pill risk-watch">Watch</span></div>
-          <div class="sku-cell dim">Monitoring</div>
         </div>
       </div>
 
-      <!-- Quick actions row -->
       <div class="grid-2">
         <div class="panel">
-          <div class="panel-header"><div class="panel-title">⚡ Quick Actions</div></div>
-          <div style="padding:16px;display:flex;flex-direction:column;gap:8px">
-            <button class="btn btn-primary" style="width:100%;justify-content:center;padding:12px" onclick="showSection('agent');setTimeout(startAgent,200)">▶ Run Agent Now</button>
-            <button class="btn btn-ghost" style="width:100%;justify-content:center;padding:12px" onclick="showSection('logs')">≡ View Audit Log</button>
-            <button class="btn btn-ghost" style="width:100%;justify-content:center;padding:12px" onclick="showSection('suppliers')">◉ Manage Suppliers</button>
-            <button class="btn btn-danger" style="width:100%;justify-content:center;padding:12px" onclick="showSkuAlert()">🚨 View Critical Alert</button>
+          <div class="panel-header"><div class="panel-title">📈 Velocity Trend (7d)</div></div>
+          <div style="padding:18px;display:flex;flex-direction:column;gap:13px">
+            <div><div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:11px;color:var(--muted);margin-bottom:5px"><span>Focal Arc Frame</span><span style="color:var(--red)">48/day ↑</span></div><div style="height:5px;background:var(--surface2);border-radius:3px"><div style="height:100%;width:96%;background:var(--red);border-radius:3px"></div></div></div>
+            <div><div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:11px;color:var(--muted);margin-bottom:5px"><span>Focal Slim 01</span><span style="color:var(--accent)">47/day →</span></div><div style="height:5px;background:var(--surface2);border-radius:3px"><div style="height:100%;width:94%;background:var(--accent);border-radius:3px"></div></div></div>
+            <div><div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:11px;color:var(--muted);margin-bottom:5px"><span>Focal Round 03</span><span style="color:var(--blue)">31/day →</span></div><div style="height:5px;background:var(--surface2);border-radius:3px"><div style="height:100%;width:62%;background:var(--blue);border-radius:3px"></div></div></div>
           </div>
         </div>
         <div class="panel">
-          <div class="panel-header"><div class="panel-title">📈 Velocity Trend (7d)</div></div>
-          <div style="padding:20px">
-            <div style="display:flex;flex-direction:column;gap:14px">
-              <div>
-                <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:11px;color:var(--muted);margin-bottom:6px"><span>Lense Drop 001</span><span style="color:var(--red)">48/day ↑</span></div>
-                <div style="height:6px;background:var(--surface2);border-radius:3px"><div style="height:100%;width:96%;background:var(--red);border-radius:3px"></div></div>
-              </div>
-              <div>
-                <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:11px;color:var(--muted);margin-bottom:6px"><span>Lense 5to9</span><span style="color:var(--accent)">47/day →</span></div>
-                <div style="height:6px;background:var(--surface2);border-radius:3px"><div style="height:100%;width:94%;background:var(--accent);border-radius:3px"></div></div>
-              </div>
-              <div>
-                <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:11px;color:var(--muted);margin-bottom:6px"><span>Drop 001 Yellow</span><span style="color:var(--blue)">31/day →</span></div>
-                <div style="height:6px;background:var(--surface2);border-radius:3px"><div style="height:100%;width:62%;background:var(--blue);border-radius:3px"></div></div>
-              </div>
+          <div class="panel-header"><div class="panel-title">📦 Reorder History <span class="backend-hook">← /api/orders</span></div></div>
+          <div style="padding:18px;display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:var(--surface2);border-radius:8px;font-size:12px">
+              <div><div style="font-weight:500">Focal Arc Frame · 500 units</div><div style="font-family:var(--font-mono);font-size:10px;color:var(--muted)">May 14 · $6,250</div></div>
+              <span style="font-family:var(--font-mono);font-size:10px;background:var(--accent-dim);color:var(--accent);padding:2px 8px;border-radius:4px">Delivered</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:var(--surface2);border-radius:8px;font-size:12px">
+              <div><div style="font-weight:500">Focal Slim 01 · 800 units</div><div style="font-family:var(--font-mono);font-size:10px;color:var(--muted)">Apr 28 · $8,000</div></div>
+              <span style="font-family:var(--font-mono);font-size:10px;background:var(--accent-dim);color:var(--accent);padding:2px 8px;border-radius:4px">Delivered</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:var(--red-dim);border-radius:8px;font-size:12px;border:1px solid rgba(239,68,68,0.15)">
+              <div><div style="font-weight:500">Focal Arc Frame · 800 units</div><div style="font-family:var(--font-mono);font-size:10px;color:var(--muted)">Pending approval · $10,000</div></div>
+              <span style="font-family:var(--font-mono);font-size:10px;background:var(--amber-dim);color:var(--amber);padding:2px 8px;border-radius:4px">Pending</span>
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- ══════ AGENT ══════ -->
+    <!-- ══ AGENT ══ -->
     <div id="section-agent" class="section">
       <div style="display:flex;align-items:center;justify-content:space-between">
         <div>
-          <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px">// autonomous agent</div>
-          <h2 style="font-family:var(--font-display);font-size:24px;font-weight:800;letter-spacing:-0.03em">Agent Control Center</h2>
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:3px">// autonomous agent <span class="backend-hook">← /api/stream (SSE)</span></div>
+          <h2 style="font-family:var(--font-display);font-size:22px;font-weight:800;letter-spacing:-0.03em">Agent Control Center</h2>
         </div>
         <div style="display:flex;gap:8px">
           <button class="btn btn-ghost" id="resetBtn" onclick="resetAgent()" style="display:none">↺ Reset</button>
@@ -439,245 +472,442 @@ nav{position:fixed;top:0;left:0;right:0;z-index:200;display:flex;align-items:cen
         </div>
       </div>
 
-      <!-- Trace Terminal -->
       <div class="terminal">
         <div class="terminal-header">
           <span class="t-dot t-red"></span><span class="t-dot t-yellow"></span><span class="t-dot t-green"></span>
-          <span class="t-title">chainagent-runtime · brand: Lense · 3 SKUs monitored</span>
+          <span class="t-title">chainagent-runtime · <span id="agent-brand-label">brand: Focal</span> · 3 SKUs monitored</span>
           <div class="t-live" id="termLive" style="display:none"><span class="dot"></span>agent running</div>
         </div>
         <div class="trace-body" id="traceBody">
-          <div style="font-family:var(--font-mono);font-size:12px;color:var(--muted);padding:20px 0;text-align:center">
-            Click "Run Agent" to start the autonomous loop
-          </div>
+          <div style="font-family:var(--font-mono);font-size:12px;color:var(--muted);padding:20px 0;text-align:center">Click "Run Agent" to start the autonomous loop</div>
         </div>
       </div>
 
-      <!-- Email panel -->
       <div class="email-panel" id="emailPanel" style="display:none">
-        <div class="email-header">
-          <div class="panel-title">📧 Drafted Supplier Email — awaiting your approval</div>
-        </div>
+        <div class="email-header"><div class="panel-title">📧 Drafted Supplier Email <span class="backend-hook">← claude_draft.py</span></div></div>
         <div class="email-fields">
-          <div class="email-field"><span class="email-field-label">To:</span><span class="email-field-val">wei@guangzhou-lense.cn</span></div>
-          <div class="email-field"><span class="email-field-label">Subject:</span><span class="email-field-val">Urgent Reorder — Lense Drop 001 · 800 units</span></div>
+          <div class="email-field"><span class="email-field-label">To:</span><span class="email-field-val">wei@guangzhou-focal.cn</span></div>
+          <div class="email-field"><span class="email-field-label">Subject:</span><span class="email-field-val">Urgent Reorder — Focal Arc Frame · 800 units</span></div>
         </div>
         <div class="email-body-area">
-          <div id="emailBodyDisplay" class="email-body-text">Hi Wei,
+          <div class="email-body-text">Hi Wei,
 
-We need to place an urgent reorder for <span class="email-accent">800 units</span> of Lense Drop 001 (SKU: DHOD5-EC999009).
+We need to place an urgent reorder for <span class="email-accent">800 units</span> of Focal Arc Frame (SKU: FOCL-EC999002).
 
-Current stock covers approximately <span class="email-accent">9 days</span>. Our lead time is 21 days, putting us at risk of stockout. Please confirm availability and the earliest possible ship date.
+Current stock covers approximately <span class="email-accent">9 days</span>. Lead time is 21 days — we are at stockout risk. Please confirm availability and earliest ship date.
 
-Total order value: <span class="email-accent">$10,000 USD</span> (800 units × $12.50 COGS)
+Total order value: <span class="email-accent">$10,000 USD</span> (800 × $12.50 COGS)
 
-Best regards,
-Lense Operations Team
+Best,
+Focal Operations Team
 
-<span style="color:var(--muted)">— Sent by ChainAgent on behalf of Lense</span></div>
-          <textarea id="emailBodyEdit" class="email-body-text editable-area" style="display:none">Hi Wei,
-
-We need to place an urgent reorder for 800 units of Lense Drop 001 (SKU: DHOD5-EC999009).
-
-Current stock covers approximately 9 days. Our lead time is 21 days, putting us at risk of stockout. Please confirm availability and the earliest possible ship date.
-
-Total order value: $10,000 USD (800 units × $12.50 COGS)
-
-Best regards,
-Lense Operations Team
-
-— Sent by ChainAgent on behalf of Lense</textarea>
+<span style="color:var(--muted)">— Sent by ChainAgent</span></div>
         </div>
         <div class="email-actions" id="emailActions">
-          <button class="btn btn-approve" id="approveBtn" onclick="approveEmail()">✓ Approve & Send</button>
-          <button class="btn btn-edit" id="editBtn" onclick="toggleEdit()">✏ Edit</button>
+          <button class="btn btn-approve" onclick="approveEmail()">✓ Approve & Send</button>
+          <button class="btn-edit-sm" onclick="toggleEdit()">✏ Edit</button>
           <button class="btn-cancel-sm" onclick="cancelEmail()">Cancel</button>
-          <div class="countdown-timer" id="countdown">⏱ auto-sending in <span id="countdownVal">02:00:00</span></div>
+          <div class="countdown-timer">⏱ auto-sending in <span id="countdownVal">02:00:00</span></div>
         </div>
-        <div id="emailResult" style="display:none;padding:14px 20px;font-family:var(--font-mono);font-size:12px"></div>
+        <div id="emailResult" style="display:none;padding:13px 18px;font-family:var(--font-mono);font-size:12px"></div>
+        <div id="supplierReply" class="supplier-reply" style="display:none">
+          <div class="reply-header"><span>✉</span> Supplier Reply · wei@guangzhou-focal.cn</div>
+          <div class="reply-body">Hi, confirmed — <strong>800 units of Focal Arc Frame</strong> are available. We can ship by Monday. Estimated delivery to your fulfillment center: <strong>7 business days</strong>. Invoice to follow.
+
+— Wei, Guangzhou Focal Optics Co.</div>
+        </div>
       </div>
     </div>
 
-    <!-- ══════ INVENTORY ══════ -->
+    <!-- ══ INVENTORY ══ -->
     <div id="section-inventory" class="section">
-      <div style="font-family:var(--font-display);font-size:24px;font-weight:800;letter-spacing:-0.03em;margin-bottom:4px">Inventory Details</div>
-      <div class="grid-3">
-        <div class="panel" style="grid-column:1/-1">
-          <div class="panel-header">
-            <div class="panel-title">All SKUs</div>
-            <div class="panel-actions">
-              <input placeholder="Search SKUs..." style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:6px 12px;color:var(--text);font-family:var(--font-mono);font-size:11px;outline:none;width:180px" oninput="filterSkus(this.value)">
-              <button class="btn btn-primary" onclick="showAddSkuModal()">+ Add SKU</button>
-            </div>
-          </div>
-          <div class="sku-table-head" style="grid-template-columns:2fr 80px 90px 80px 80px 80px 90px">
-            <div class="sku-th">Product</div>
-            <div class="sku-th">Stock</div>
-            <div class="sku-th">Velocity</div>
-            <div class="sku-th">Days Left</div>
-            <div class="sku-th">Lead Time</div>
-            <div class="sku-th">COGS</div>
-            <div class="sku-th">Risk</div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <h2 style="font-family:var(--font-display);font-size:22px;font-weight:800;letter-spacing:-0.03em">Inventory <span class="backend-hook">← /api/inventory</span></h2>
+        <div style="display:flex;gap:8px">
+          <input placeholder="Search SKUs..." style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:6px 11px;color:var(--text);font-family:var(--font-mono);font-size:11px;outline:none;width:160px" oninput="filterSkus(this.value)">
+          <button class="btn btn-primary" onclick="showAddSkuModal()">+ Add SKU</button>
+        </div>
+      </div>
+      <div class="panel">
+        <div style="overflow-x:auto">
+          <div class="sku-table-head" style="grid-template-columns:2fr 75px 85px 75px 75px 75px 85px">
+            <div class="sku-th">Product</div><div class="sku-th">Stock</div><div class="sku-th">Velocity</div>
+            <div class="sku-th">Days Left</div><div class="sku-th">Lead Time</div><div class="sku-th">COGS</div><div class="sku-th">Risk</div>
           </div>
           <div id="inventoryRows">
-            <div class="sku-row" style="grid-template-columns:2fr 80px 90px 80px 80px 80px 90px">
-              <div><div class="sku-name">Lense 5to9</div><div class="sku-id">DHOD5-EC999002</div></div>
-              <div class="sku-cell">1,592</div><div class="sku-cell">47/day</div>
-              <div class="sku-cell">33.9</div><div class="sku-cell">21 days</div>
-              <div class="sku-cell">$10.00</div>
-              <div><span class="risk-pill risk-ok">Healthy</span></div>
+            <div class="sku-row" style="grid-template-columns:2fr 75px 85px 75px 75px 75px 85px">
+              <div><div class="sku-name">Focal Slim 01</div><div class="sku-id">FOCL-EC999001</div></div>
+              <div class="sku-cell">1,592</div><div class="sku-cell">47/day</div><div class="sku-cell">33.9</div>
+              <div class="sku-cell">21 days</div><div class="sku-cell">$10.00</div><div><span class="risk-pill risk-ok">Healthy</span></div>
             </div>
-            <div class="sku-row critical" style="grid-template-columns:2fr 80px 90px 80px 80px 80px 90px">
-              <div><div class="sku-name">Lense Drop 001</div><div class="sku-id">DHOD5-EC999009</div></div>
-              <div class="sku-cell">428</div><div class="sku-cell">48/day</div>
-              <div class="sku-cell red">8.9</div><div class="sku-cell">21 days</div>
-              <div class="sku-cell">$12.50</div>
-              <div><span class="risk-pill risk-critical">Critical</span></div>
+            <div class="sku-row critical" style="grid-template-columns:2fr 75px 85px 75px 75px 75px 85px">
+              <div><div class="sku-name">Focal Arc Frame</div><div class="sku-id">FOCL-EC999002</div></div>
+              <div class="sku-cell">428</div><div class="sku-cell">48/day</div><div class="sku-cell red">8.9</div>
+              <div class="sku-cell">21 days</div><div class="sku-cell">$12.50</div><div><span class="risk-pill risk-critical">Critical</span></div>
             </div>
-            <div class="sku-row" style="grid-template-columns:2fr 80px 90px 80px 80px 80px 90px">
-              <div><div class="sku-name">Lense Drop 001 Yellow</div><div class="sku-id">DHOD5-EC999003</div></div>
-              <div class="sku-cell">1,594</div><div class="sku-cell">31/day</div>
-              <div class="sku-cell amber">21.0</div><div class="sku-cell">21 days</div>
-              <div class="sku-cell">$12.50</div>
-              <div><span class="risk-pill risk-watch">Watch</span></div>
+            <div class="sku-row" style="grid-template-columns:2fr 75px 85px 75px 75px 75px 85px">
+              <div><div class="sku-name">Focal Round 03</div><div class="sku-id">FOCL-EC999003</div></div>
+              <div class="sku-cell">1,594</div><div class="sku-cell">31/day</div><div class="sku-cell amber">21.0</div>
+              <div class="sku-cell">21 days</div><div class="sku-cell">$12.50</div><div><span class="risk-pill risk-watch">Watch</span></div>
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- ══════ SUPPLIERS ══════ -->
+    <!-- ══ SUPPLIERS ══ -->
     <div id="section-suppliers" class="section">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-        <div style="font-family:var(--font-display);font-size:24px;font-weight:800;letter-spacing:-0.03em">Supplier Network</div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <h2 style="font-family:var(--font-display);font-size:22px;font-weight:800;letter-spacing:-0.03em">Supplier Network</h2>
         <button class="btn btn-primary" onclick="showAddSupplierModal()">+ Add Supplier</button>
       </div>
       <div class="grid-2">
         <div class="supplier-card">
-          <div class="supplier-name">Guangzhou Lense Optics Co.</div>
-          <div class="supplier-detail">
-            Contact: Wei Zhang · wei@guangzhou-lense.cn<br>
-            Location: Guangzhou, China · Lead time: 21 days<br>
-            MOQ: 500 units · Payment: Net-30
-          </div>
-          <div class="supplier-status"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block"></span>Active · 3 SKUs</div>
-          <div style="display:flex;gap:8px;margin-top:10px">
+          <div class="supplier-name">Guangzhou Focal Optics Co.</div>
+          <div class="supplier-detail">Contact: Wei Zhang · wei@guangzhou-focal.cn<br>Location: Guangzhou, China · Lead time: 21 days<br>MOQ: 500 units · Payment: Net-30 · Rating: ★★★★★</div>
+          <div class="supplier-status" style="color:var(--accent)"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block"></span>Active · 3 SKUs assigned</div>
+          <div style="display:flex;gap:7px;margin-top:10px">
             <button class="btn btn-ghost" style="font-size:10px;padding:5px 10px" onclick="showToast('Email drafted to Wei Zhang','success')">📧 Email</button>
-            <button class="btn btn-ghost" style="font-size:10px;padding:5px 10px" onclick="showToast('Opening supplier profile','success')">◉ Profile</button>
+            <button class="btn btn-ghost" style="font-size:10px;padding:5px 10px" onclick="showToast('Viewing profile','success')">◉ Profile</button>
+            <button class="btn btn-ghost" style="font-size:10px;padding:5px 10px" onclick="showToast('Lead time updated','success')">✎ Edit</button>
           </div>
         </div>
         <div class="supplier-card">
           <div class="supplier-name">Shenzhen Optical Partners Ltd.</div>
-          <div class="supplier-detail">
-            Contact: Amy Liu · amy@sz-optical.cn<br>
-            Location: Shenzhen, China · Lead time: 18 days<br>
-            MOQ: 300 units · Payment: Net-45
-          </div>
-          <div class="supplier-status"><span style="width:6px;height:6px;border-radius:50%;background:var(--muted);display:inline-block"></span>Backup supplier</div>
-          <div style="display:flex;gap:8px;margin-top:10px">
+          <div class="supplier-detail">Contact: Amy Liu · amy@sz-optical.cn<br>Location: Shenzhen, China · Lead time: 18 days<br>MOQ: 300 units · Payment: Net-45 · Rating: ★★★★☆</div>
+          <div class="supplier-status" style="color:var(--muted)"><span style="width:6px;height:6px;border-radius:50%;background:var(--muted);display:inline-block"></span>Backup supplier</div>
+          <div style="display:flex;gap:7px;margin-top:10px">
             <button class="btn btn-ghost" style="font-size:10px;padding:5px 10px" onclick="showToast('Email drafted to Amy Liu','success')">📧 Email</button>
-            <button class="btn btn-ghost" style="font-size:10px;padding:5px 10px" onclick="showToast('Opening supplier profile','success')">◉ Profile</button>
+            <button class="btn btn-ghost" style="font-size:10px;padding:5px 10px" onclick="showToast('Viewing profile','success')">◉ Profile</button>
+            <button class="btn btn-ghost" style="font-size:10px;padding:5px 10px" onclick="showAddSkuModal()">+ Assign SKU</button>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- ══════ AUDIT LOG ══════ -->
+    <!-- ══ AUDIT LOG ══ -->
     <div id="section-logs" class="section">
-      <div style="font-family:var(--font-display);font-size:24px;font-weight:800;letter-spacing:-0.03em;margin-bottom:4px">Audit Log</div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <h2 style="font-family:var(--font-display);font-size:22px;font-weight:800;letter-spacing:-0.03em">Audit Log <span class="backend-hook">← snowflake_log.py</span></h2>
+        <button class="btn btn-ghost" onclick="showToast('Exported to CSV','success')">↓ Export CSV</button>
+      </div>
       <div class="panel">
-        <div class="panel-header">
-          <div class="panel-title">≡ All Agent Actions</div>
-          <div class="panel-actions">
-            <button class="btn btn-ghost" onclick="showToast('Exported to CSV','success')">↓ Export CSV</button>
-          </div>
-        </div>
-        <div class="audit-row" style="background:var(--surface2);border-bottom:1px solid var(--border)">
+        <div style="display:grid;grid-template-columns:100px 1fr 90px 80px;gap:10px;padding:9px 18px;border-bottom:1px solid var(--border);background:var(--surface2)">
           <div class="sku-th">Time</div><div class="sku-th">Action</div><div class="sku-th">SKU</div><div class="sku-th">Status</div>
         </div>
         <div id="auditRows">
-          <div class="audit-row">
-            <div class="audit-time">Today 09:14</div>
-            <div class="audit-action">Reorder email drafted · 800 units · $10,000</div>
-            <div class="audit-sku">DHOD5-EC999009</div>
-            <div><span class="audit-status status-pending">Pending</span></div>
+          <div class="audit-row"><div class="audit-time">Today 09:14</div><div class="audit-action">Reorder drafted · 800 units · $10,000</div><div class="audit-sku">FOCL-EC999002</div><div><span class="audit-status status-pending">Pending</span></div></div>
+          <div class="audit-row"><div class="audit-time">Yesterday</div><div class="audit-action">Reorder approved & sent · 500 units · $6,250</div><div class="audit-sku">FOCL-EC999001</div><div><span class="audit-status status-sent">Sent</span></div></div>
+          <div class="audit-row"><div class="audit-time">May 28</div><div class="audit-action">Risk breach detected · monitoring</div><div class="audit-sku">FOCL-EC999003</div><div><span class="audit-status status-sent">Resolved</span></div></div>
+          <div class="audit-row"><div class="audit-time">May 26</div><div class="audit-action">Reorder cancelled by founder</div><div class="audit-sku">FOCL-EC999002</div><div><span class="audit-status status-cancelled">Cancelled</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ NOTIFICATIONS ══ -->
+    <div id="section-notifications" class="section">
+      <h2 style="font-family:var(--font-display);font-size:22px;font-weight:800;letter-spacing:-0.03em">Notifications</h2>
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">🔔 Notification Channels</div></div>
+        <div style="padding:18px;display:flex;flex-direction:column;gap:12px">
+
+          <div class="notif-preview">
+            <div class="notif-header">
+              <div class="notif-icon" style="background:#4A154B">💬</div>
+              <div><div class="notif-title">Slack</div><div class="notif-sub">Connected · #chainagent-alerts</div></div>
+              <button class="toggle on" onclick="toggleSetting(this)" style="margin-left:auto"></button>
+            </div>
+            <div class="notif-body">
+              <strong>Preview:</strong> 🚨 ChainAgent Alert: Focal Arc Frame has 8.9 days of stock remaining. Lead time is 21 days. I've drafted a reorder for 800 units. Approve here →
+            </div>
           </div>
-          <div class="audit-row">
-            <div class="audit-time">Yesterday 14:22</div>
-            <div class="audit-action">Reorder approved & sent · 500 units · $5,000</div>
-            <div class="audit-sku">DHOD5-EC999002</div>
-            <div><span class="audit-status status-sent">Sent</span></div>
+
+          <div class="notif-preview">
+            <div class="notif-header">
+              <div class="notif-icon" style="background:#EA4335">📧</div>
+              <div><div class="notif-title">Email</div><div class="notif-sub">founder@focal.com</div></div>
+              <button class="toggle on" onclick="toggleSetting(this)" style="margin-left:auto"></button>
+            </div>
+            <div class="notif-body">
+              <strong>Preview:</strong> Subject: [ChainAgent] Action Required — Focal Arc Frame stockout in 8.9 days. Your agent has drafted a reorder and is waiting for your approval.
+            </div>
           </div>
-          <div class="audit-row">
-            <div class="audit-time">May 28 11:05</div>
-            <div class="audit-action">Risk threshold breach detected · monitoring</div>
-            <div class="audit-sku">DHOD5-EC999003</div>
-            <div><span class="audit-status status-sent">Resolved</span></div>
+
+          <div class="notif-preview">
+            <div class="notif-header">
+              <div class="notif-icon" style="background:#25D366">📱</div>
+              <div><div class="notif-title">SMS / WhatsApp</div><div class="notif-sub">+1 (555) 000-0000 · via Twilio</div></div>
+              <button class="toggle off" onclick="toggleSetting(this)" style="margin-left:auto"></button>
+            </div>
+            <div class="notif-body">
+              <strong>Preview:</strong> ChainAgent: ⚠ Focal Arc Frame — 8.9 days left. Reorder drafted for 800 units ($10k). Reply YES to approve.
+            </div>
           </div>
-          <div class="audit-row">
-            <div class="audit-time">May 26 08:30</div>
-            <div class="audit-action">Reorder cancelled by founder</div>
-            <div class="audit-sku">DHOD5-EC999009</div>
-            <div><span class="audit-status status-cancelled">Cancelled</span></div>
+
+          <div class="notif-preview">
+            <div class="notif-header">
+              <div class="notif-icon" style="background:var(--accent-dim)">🔊</div>
+              <div><div class="notif-title">Voice Alert</div><div class="notif-sub">ElevenLabs · Rachel voice</div></div>
+              <button class="toggle on" onclick="toggleSetting(this)" style="margin-left:auto"></button>
+            </div>
+            <div class="notif-body">
+              <strong>Preview:</strong> "Focal Arc Frame has 8 days of stock. Lead time is 21 days. I've drafted a reorder for 800 units. Awaiting your approval."
+            </div>
+          </div>
+
+          <button class="btn btn-ghost" style="width:100%;justify-content:center;padding:10px" onclick="showToast('Test notifications sent','success')">📤 Send test notification</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ SETTINGS ══ -->
+    <div id="section-settings" class="section">
+      <h2 style="font-family:var(--font-display);font-size:22px;font-weight:800;letter-spacing:-0.03em">Settings</h2>
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">◎ Agent Configuration</div></div>
+        <div class="settings-grid">
+          <div class="setting-row"><div><div class="setting-label">Auto-approve reorders</div><div class="setting-sub">Send without manual approval</div></div><button class="toggle off" onclick="toggleSetting(this)"></button></div>
+          <div class="setting-row"><div><div class="setting-label">Voice alerts</div><div class="setting-sub">ElevenLabs audio</div></div><button class="toggle on" onclick="toggleSetting(this)"></button></div>
+          <div class="setting-row"><div><div class="setting-label">Snowflake logging</div><div class="setting-sub">Log all actions</div></div><button class="toggle on" onclick="toggleSetting(this)"></button></div>
+          <div class="setting-row"><div><div class="setting-label">Auto-schedule agent</div><div class="setting-sub">Run every X hours</div></div><button class="toggle on" onclick="toggleSetting(this);toggleSchedule(this)"></button></div>
+          <div class="setting-row"><div><div class="setting-label">Risk threshold (days)</div><div class="setting-sub">Alert below this level</div></div><input class="input-field" type="number" value="21" onchange="showToast('Threshold updated','success')"></div>
+          <div class="setting-row"><div><div class="setting-label">Auto-send window (hrs)</div><div class="setting-sub">Hours before auto-approve</div></div><input class="input-field" type="number" value="2" onchange="showToast('Window updated','success')"></div>
+          <div class="setting-row"><div><div class="setting-label">Schedule interval (hrs)</div><div class="setting-sub">How often agent runs</div></div><input class="input-field" type="number" value="2" onchange="updateScheduleInterval(this.value)"></div>
+          <div class="setting-row"><div><div class="setting-label">Reorder buffer (days)</div><div class="setting-sub">Safety stock days</div></div><input class="input-field" type="number" value="30" onchange="showToast('Buffer updated','success')"></div>
+        </div>
+        <div style="padding:14px 18px;border-top:1px solid var(--border)"><button class="btn btn-primary" onclick="showToast('Settings saved','success')">Save Changes</button></div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">🔌 API Connections <span class="backend-hook">← .env.local</span></div></div>
+        <div style="padding:14px 18px;display:flex;flex-direction:column;gap:9px">
+          <div class="setting-row"><div><div class="setting-label">Shopify</div><div class="setting-sub" style="color:var(--accent)">● Connected · dev store</div></div><button class="btn btn-ghost" style="font-size:10px;padding:5px 10px" onclick="showToast('Shopify reconnected','success')">Reconnect</button></div>
+          <div class="setting-row"><div><div class="setting-label">Claude API</div><div class="setting-sub" style="color:var(--accent)">● Connected</div></div><button class="btn btn-ghost" style="font-size:10px;padding:5px 10px" onclick="showToast('Key updated','success')">Update Key</button></div>
+          <div class="setting-row"><div><div class="setting-label">ElevenLabs</div><div class="setting-sub" style="color:var(--accent)">● Connected</div></div><button class="btn btn-ghost" style="font-size:10px;padding:5px 10px" onclick="showToast('Key updated','success')">Update Key</button></div>
+          <div class="setting-row"><div><div class="setting-label">Snowflake</div><div class="setting-sub" style="color:var(--amber)">◎ Pending setup</div></div><button class="btn btn-primary" style="font-size:10px;padding:5px 12px" onclick="showToast('Opening Snowflake setup','success')">Connect</button></div>
+          <div class="setting-row"><div><div class="setting-label">Gemini Vision</div><div class="setting-sub" style="color:var(--accent)">● Connected · PDF parsing</div></div><button class="btn btn-ghost" style="font-size:10px;padding:5px 10px" onclick="showToast('Key updated','success')">Update Key</button></div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ══ STOCK INBOUNDS ══ -->
+    <div id="section-inbounds" class="section">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:3px">// stock inbounds · supplier → warehouse <span class="backend-hook">← /api/inbounds</span></div>
+          <h2 style="font-family:var(--font-display);font-size:22px;font-weight:800;letter-spacing:-0.03em">Stock Inbounds</h2>
+        </div>
+        <button class="btn btn-primary" onclick="document.getElementById('createInboundModal').style.display='flex'">+ Create Inbound</button>
+      </div>
+
+      <!-- Tabs -->
+      <div style="display:flex;gap:2px;padding:0 0 12px">
+        <button onclick="filterInbounds('all',this)" style="font-family:var(--font-mono);font-size:11px;padding:6px 14px;border-radius:6px;border:none;cursor:pointer;background:var(--accent-dim);color:var(--accent);border:1px solid var(--accent-mid)">All Inbounds <span style="font-size:9px;background:var(--accent-mid);padding:1px 5px;border-radius:100px;margin-left:3px">3</span></button>
+        <button onclick="filterInbounds('approval',this)" style="font-family:var(--font-mono);font-size:11px;padding:6px 14px;border-radius:6px;border:1px solid var(--border2);cursor:pointer;background:none;color:var(--muted2)">Awaiting Approval <span style="font-size:9px;background:var(--amber-dim);color:var(--amber);padding:1px 5px;border-radius:100px;margin-left:3px">1</span></button>
+        <button onclick="filterInbounds('discrepancy',this)" style="font-family:var(--font-mono);font-size:11px;padding:6px 14px;border-radius:6px;border:1px solid var(--border2);cursor:pointer;background:none;color:var(--muted2)">Discrepancies <span style="font-size:9px;background:var(--red-dim);color:var(--red);padding:1px 5px;border-radius:100px;margin-left:3px">1</span></button>
+      </div>
+
+      <div class="panel">
+        <div style="display:grid;grid-template-columns:2fr 80px 110px 100px 90px 110px;gap:10px;padding:9px 18px;border-bottom:1px solid var(--border);background:var(--surface2)">
+          <div class="sku-th">Inbound</div><div class="sku-th">Units</div><div class="sku-th">Status</div><div class="sku-th">ETA</div><div class="sku-th">Tracking</div><div class="sku-th">Actions</div>
+        </div>
+        <div id="inboundRows">
+          <div class="sku-row" style="grid-template-columns:2fr 80px 110px 100px 90px 110px" data-inb-status="transit" onclick="openInboundDetail('031')">
+            <div><div class="sku-name">Focal Arc Frame Reorder</div><div class="sku-id">INB-2026-031 · Guangzhou Focal Optics</div></div>
+            <div class="sku-cell">800 units</div>
+            <div><span style="font-family:var(--font-mono);font-size:10px;font-weight:500;padding:3px 8px;border-radius:4px;background:var(--blue-dim);color:var(--blue)">In Transit</span></div>
+            <div class="sku-cell" style="font-size:11px">May 31, 2026</div>
+            <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted)">SF7492823</div>
+            <div style="display:flex;gap:5px" onclick="event.stopPropagation()">
+              <button class="btn btn-ghost" style="font-size:10px;padding:4px 9px" onclick="showToast('Tracking SF7492823 opened','success')">Track</button>
+            </div>
+          </div>
+          <div class="sku-row" style="grid-template-columns:2fr 80px 110px 100px 90px 110px;background:var(--amber-dim)" data-inb-status="approval" onclick="openInboundDetail('029')">
+            <div><div class="sku-name">Focal Round 03 Restock</div><div class="sku-id">INB-2026-029 · Draft · Needs approval</div></div>
+            <div class="sku-cell">400 units</div>
+            <div><span style="font-family:var(--font-mono);font-size:10px;font-weight:500;padding:3px 8px;border-radius:4px;background:var(--amber-dim);color:var(--amber)">Awaiting Approval</span></div>
+            <div class="sku-cell" style="font-size:11px">Jun 12, 2026</div>
+            <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted)">Pending</div>
+            <div style="display:flex;gap:5px" onclick="event.stopPropagation()">
+              <button class="btn btn-primary" style="font-size:10px;padding:4px 9px" onclick="showToast('Inbound approved — supplier notified','success');this.textContent='Approved ✓';this.disabled=true">Approve</button>
+              <button class="btn btn-ghost" style="font-size:10px;padding:4px 8px" onclick="showToast('Draft saved','success')">Edit</button>
+            </div>
+          </div>
+          <div class="sku-row critical" style="grid-template-columns:2fr 80px 110px 100px 90px 110px" data-inb-status="discrepancy" onclick="openInboundDetail('025')">
+            <div><div class="sku-name">Focal Round 03 ⚠ Discrepancy</div><div class="sku-id">INB-2026-025 · Declared 200u · Received 150u</div></div>
+            <div class="sku-cell red">150/200</div>
+            <div><span style="font-family:var(--font-mono);font-size:10px;font-weight:500;padding:3px 8px;border-radius:4px;background:var(--red-dim);color:var(--red);animation:flicker 2s infinite">Discrepancy</span></div>
+            <div class="sku-cell" style="font-size:11px">May 20, 2026</div>
+            <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted)">SF7389001</div>
+            <div style="display:flex;gap:5px" onclick="event.stopPropagation()">
+              <button class="btn btn-danger" style="font-size:10px;padding:4px 9px" onclick="showToast('Discrepancy report filed','success')">File Report</button>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- ══════ SETTINGS ══════ -->
-    <div id="section-settings" class="section">
-      <div style="font-family:var(--font-display);font-size:24px;font-weight:800;letter-spacing:-0.03em;margin-bottom:4px">Settings</div>
-      <div class="panel">
-        <div class="panel-header"><div class="panel-title">◎ Agent Configuration</div></div>
-        <div class="settings-grid">
-          <div class="setting-row">
-            <div><div class="setting-label">Auto-approve reorders</div><div class="setting-sub">Send without manual approval</div></div>
-            <button class="toggle off" onclick="toggleSetting(this)"></button>
-          </div>
-          <div class="setting-row">
-            <div><div class="setting-label">Voice alerts</div><div class="setting-sub">ElevenLabs audio notifications</div></div>
-            <button class="toggle on" onclick="toggleSetting(this)"></button>
-          </div>
-          <div class="setting-row">
-            <div><div class="setting-label">Snowflake logging</div><div class="setting-sub">Log all actions to warehouse</div></div>
-            <button class="toggle on" onclick="toggleSetting(this)"></button>
-          </div>
-          <div class="setting-row">
-            <div><div class="setting-label">Email notifications</div><div class="setting-sub">Notify founder on action</div></div>
-            <button class="toggle on" onclick="toggleSetting(this)"></button>
-          </div>
-          <div class="setting-row">
-            <div><div class="setting-label">Risk threshold (days)</div><div class="setting-sub">Alert when stock falls below</div></div>
-            <input class="input-field" type="number" value="21" onchange="showToast('Threshold updated','success')">
-          </div>
-          <div class="setting-row">
-            <div><div class="setting-label">Auto-send window (hrs)</div><div class="setting-sub">Hours before auto-approve</div></div>
-            <input class="input-field" type="number" value="2" onchange="showToast('Window updated','success')">
-          </div>
+    <!-- ══ ORDERS ══ -->
+    <div id="section-orders" class="section">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:3px">// order management <span class="backend-hook">← /api/orders</span></div>
+          <h2 style="font-family:var(--font-display);font-size:22px;font-weight:800;letter-spacing:-0.03em">Orders</h2>
         </div>
-        <div style="padding:16px 20px;border-top:1px solid var(--border)">
-          <button class="btn btn-primary" onclick="showToast('Settings saved','success')">Save Changes</button>
-        </div>
+        <button class="btn btn-primary" onclick="showToast('Create order modal coming soon','success')">+ New Order</button>
       </div>
       <div class="panel">
-        <div class="panel-header"><div class="panel-title">🔌 API Connections</div></div>
-        <div style="padding:16px 20px;display:flex;flex-direction:column;gap:10px">
-          <div class="setting-row">
-            <div><div class="setting-label">Shopify</div><div class="setting-sub" style="color:var(--accent)">● Connected · dev store</div></div>
-            <button class="btn btn-ghost" style="font-size:10px;padding:5px 10px" onclick="showToast('Shopify reconnected','success')">Reconnect</button>
-          </div>
-          <div class="setting-row">
-            <div><div class="setting-label">Claude API</div><div class="setting-sub" style="color:var(--accent)">● Connected</div></div>
-            <button class="btn btn-ghost" style="font-size:10px;padding:5px 10px" onclick="showToast('API key updated','success')">Update Key</button>
-          </div>
-          <div class="setting-row">
-            <div><div class="setting-label">ElevenLabs</div><div class="setting-sub" style="color:var(--accent)">● Connected</div></div>
-            <button class="btn btn-ghost" style="font-size:10px;padding:5px 10px" onclick="showToast('API key updated','success')">Update Key</button>
-          </div>
-          <div class="setting-row">
-            <div><div class="setting-label">Snowflake</div><div class="setting-sub" style="color:var(--amber)">◎ Pending setup</div></div>
-            <button class="btn btn-primary" style="font-size:10px;padding:5px 12px" onclick="showToast('Opening Snowflake setup','success')">Connect</button>
-          </div>
+        <div style="display:flex;gap:2px;padding:12px 18px;border-bottom:1px solid var(--border);background:var(--surface2)">
+          <button style="font-family:var(--font-mono);font-size:11px;padding:5px 12px;border-radius:6px;border:none;cursor:pointer;background:var(--accent-dim);color:var(--accent);border:1px solid var(--accent-mid)">All <span style="font-size:9px;padding:1px 5px;border-radius:100px;background:var(--accent-mid);margin-left:2px">5</span></button>
+          <button style="font-family:var(--font-mono);font-size:11px;padding:5px 12px;border-radius:6px;border:1px solid var(--border2);cursor:pointer;background:none;color:var(--muted2)">Issues <span style="font-size:9px;padding:1px 5px;border-radius:100px;background:var(--red-dim);color:var(--red);margin-left:2px">2</span></button>
+          <button style="font-family:var(--font-mono);font-size:11px;padding:5px 12px;border-radius:6px;border:1px solid var(--border2);cursor:pointer;background:none;color:var(--muted2)">On Hold <span style="font-size:9px;padding:1px 5px;border-radius:100px;background:var(--amber-dim);color:var(--amber);margin-left:2px">1</span></button>
+          <button style="font-family:var(--font-mono);font-size:11px;padding:5px 12px;border-radius:6px;border:1px solid var(--border2);cursor:pointer;background:none;color:var(--muted2)">Fulfilled <span style="font-size:9px;padding:1px 5px;border-radius:100px;background:rgba(34,197,94,0.12);color:#4ade80;margin-left:2px">2</span></button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 90px 70px 100px 80px 120px;gap:10px;padding:9px 18px;border-bottom:1px solid var(--border)">
+          <div class="sku-th">Order</div><div class="sku-th">SKU</div><div class="sku-th">Qty</div><div class="sku-th">Status</div><div class="sku-th">Dest.</div><div class="sku-th">Actions</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 90px 70px 100px 80px 120px;gap:10px;padding:12px 18px;border-bottom:1px solid var(--border);align-items:center;cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+          <div><div class="sku-name" style="font-size:12px">ORD-29482 · J. Chen</div><div class="sku-id">May 30 09:14</div></div>
+          <div style="font-family:var(--font-mono);font-size:11px">Focal Arc</div><div class="sku-cell">2</div>
+          <span style="font-family:var(--font-mono);font-size:10px;padding:3px 8px;border-radius:4px;background:var(--blue-dim);color:var(--blue)">Shipped</span>
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted)">New York</div>
+          <div style="display:flex;gap:4px"><button class="btn btn-ghost" style="font-size:10px;padding:3px 8px" onclick="showToast('Order ORD-29482 opened','success')">View</button></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 90px 70px 100px 80px 120px;gap:10px;padding:12px 18px;border-bottom:1px solid var(--border);align-items:center;cursor:pointer;background:var(--red-dim)">
+          <div><div class="sku-name" style="font-size:12px">ORD-29481 ⚠ Address issue</div><div class="sku-id">May 30 08:52</div></div>
+          <div style="font-family:var(--font-mono);font-size:11px">Focal Slim</div><div class="sku-cell">1</div>
+          <span style="font-family:var(--font-mono);font-size:10px;padding:3px 8px;border-radius:4px;background:var(--red-dim);color:var(--red)">Issue</span>
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted)">London</div>
+          <div style="display:flex;gap:4px"><button class="btn btn-danger" style="font-size:10px;padding:3px 8px" onclick="showToast('Address corrected','success')">Fix</button><button class="btn btn-amber" style="background:var(--amber-dim);color:var(--amber);border:1px solid rgba(245,158,11,0.2);font-size:10px;padding:3px 8px" onclick="showToast('Order placed on hold','success')">Hold</button></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 90px 70px 100px 80px 120px;gap:10px;padding:12px 18px;border-bottom:1px solid var(--border);align-items:center;cursor:pointer;background:var(--amber-dim)">
+          <div><div class="sku-name" style="font-size:12px">ORD-29480 ⚠ Payment hold</div><div class="sku-id">May 30 08:30</div></div>
+          <div style="font-family:var(--font-mono);font-size:11px">Focal Arc</div><div class="sku-cell">3</div>
+          <span style="font-family:var(--font-mono);font-size:10px;padding:3px 8px;border-radius:4px;background:var(--amber-dim);color:var(--amber)">On Hold</span>
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted)">Sydney</div>
+          <div style="display:flex;gap:4px"><button class="btn btn-primary" style="font-size:10px;padding:3px 8px" onclick="showToast('Order released','success')">Release</button></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 90px 70px 100px 80px 120px;gap:10px;padding:12px 18px;align-items:center;cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+          <div><div class="sku-name" style="font-size:12px">ORD-29479 · M. Patel</div><div class="sku-id">May 29 16:44</div></div>
+          <div style="font-family:var(--font-mono);font-size:11px">Focal Round</div><div class="sku-cell">1</div>
+          <span style="font-family:var(--font-mono);font-size:10px;padding:3px 8px;border-radius:4px;background:rgba(34,197,94,0.12);color:#4ade80">Fulfilled</span>
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted)">Toronto</div>
+          <div style="display:flex;gap:4px"><button class="btn btn-ghost" style="font-size:10px;padding:3px 8px" onclick="showToast('Order details opened','success')">View</button></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ INVOICES ══ -->
+    <div id="section-invoices" class="section">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:3px">// invoice payments <span class="backend-hook">← /api/invoices</span></div>
+          <h2 style="font-family:var(--font-display);font-size:22px;font-weight:800;letter-spacing:-0.03em">Invoice Payments</h2>
+        </div>
+        <div style="font-family:var(--font-mono);font-size:12px;color:var(--muted)">Total due: <span style="color:var(--amber);font-weight:500">$13,000</span></div>
+      </div>
+      <div class="panel">
+        <div style="display:grid;grid-template-columns:1fr 100px 100px 100px 100px;gap:10px;padding:9px 18px;border-bottom:1px solid var(--border);background:var(--surface2)">
+          <div class="sku-th">Invoice</div><div class="sku-th">Amount</div><div class="sku-th">Due Date</div><div class="sku-th">Status</div><div class="sku-th">Action</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 100px 100px 100px 100px;gap:10px;padding:13px 18px;border-bottom:1px solid var(--border);align-items:center;cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+          <div><div class="sku-name" style="font-size:12px">INV-2026-041 · Guangzhou Focal</div><div class="sku-id">Focal Arc Frame reorder · 800 units</div></div>
+          <div style="font-family:var(--font-mono);font-size:13px;font-weight:500">$10,000</div>
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--red)">Jun 3, 2026</div>
+          <span style="font-family:var(--font-mono);font-size:10px;padding:3px 8px;border-radius:4px;background:var(--amber-dim);color:var(--amber)">Due Soon</span>
+          <button class="btn btn-primary" style="font-size:11px;padding:6px 14px" onclick="this.textContent='Paid ✓';this.disabled=true;this.style.background='var(--accent-dim)';this.style.color='var(--accent)';showToast('Payment processed · $10,000','success')">Pay Now</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 100px 100px 100px 100px;gap:10px;padding:13px 18px;border-bottom:1px solid var(--border);align-items:center;cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+          <div><div class="sku-name" style="font-size:12px">INV-2026-038 · Shenzhen Optical</div><div class="sku-id">Focal Round 03 materials</div></div>
+          <div style="font-family:var(--font-mono);font-size:13px;font-weight:500">$3,000</div>
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--muted)">Jun 10, 2026</div>
+          <span style="font-family:var(--font-mono);font-size:10px;padding:3px 8px;border-radius:4px;background:var(--surface2);color:var(--muted)">Upcoming</span>
+          <button class="btn btn-ghost" style="font-size:11px;padding:6px 14px" onclick="showToast('Payment scheduled for Jun 10','success')">Schedule</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 100px 100px 100px 100px;gap:10px;padding:13px 18px;align-items:center;opacity:0.6">
+          <div><div class="sku-name" style="font-size:12px">INV-2026-034 · Guangzhou Focal</div><div class="sku-id">Focal Slim 01 restock · 500 units</div></div>
+          <div style="font-family:var(--font-mono);font-size:13px;color:var(--muted)">$6,250</div>
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--muted)">May 14, 2026</div>
+          <span style="font-family:var(--font-mono);font-size:10px;padding:3px 8px;border-radius:4px;background:var(--accent-dim);color:var(--accent)">Paid</span>
+          <button class="btn btn-ghost" style="font-size:11px;padding:6px 14px;cursor:default;opacity:0.5" disabled>Paid</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ DELIVERY PERFORMANCE ══ -->
+    <div id="section-delivery" class="section">
+      <div>
+        <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:3px">// delivery performance by country <span class="backend-hook">← /api/delivery</span></div>
+        <h2 style="font-family:var(--font-display);font-size:22px;font-weight:800;letter-spacing:-0.03em">Delivery Performance</h2>
+      </div>
+      <div class="metrics-row" style="grid-template-columns:repeat(3,1fr)">
+        <div class="metric-card"><div class="metric-top"><div class="metric-icon" style="background:var(--accent-dim)">🚀</div><span class="metric-trend trend-up">Global avg</span></div><div class="metric-val">5.8</div><div class="metric-label">AVG DELIVERY DAYS</div></div>
+        <div class="metric-card"><div class="metric-top"><div class="metric-icon" style="background:var(--blue-dim)">📦</div><span class="metric-trend trend-up">+2%</span></div><div class="metric-val">97.2%</div><div class="metric-label">ON-TIME DELIVERY RATE</div></div>
+        <div class="metric-card"><div class="metric-top"><div class="metric-icon" style="background:var(--amber-dim)">🌍</div><span class="metric-trend trend-neutral">Active</span></div><div class="metric-val">38</div><div class="metric-label">COUNTRIES SHIPPED TO</div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">🌍 Delivery by Country</div><div class="panel-actions"><button class="btn btn-ghost" onclick="showToast('Exported','success')">↓ Export</button></div></div>
+        <div style="display:grid;grid-template-columns:1fr 90px 140px 70px;gap:10px;padding:9px 18px;border-bottom:1px solid var(--border);background:var(--surface2)">
+          <div class="sku-th">Country</div><div class="sku-th">Avg Days</div><div class="sku-th">On-Time Rate</div><div class="sku-th">Orders</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 90px 140px 70px;gap:10px;padding:11px 18px;border-bottom:1px solid var(--border);align-items:center;font-size:12px">
+          <div style="font-weight:500">🇺🇸 United States</div>
+          <div class="sku-cell">4.2 days</div>
+          <div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:4px;background:var(--surface3);border-radius:2px"><div style="width:98%;height:100%;background:var(--accent);border-radius:2px"></div></div><span style="font-family:var(--font-mono);font-size:10px;color:var(--accent)">98%</span></div>
+          <div class="sku-cell">2,841</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 90px 140px 70px;gap:10px;padding:11px 18px;border-bottom:1px solid var(--border);align-items:center;font-size:12px">
+          <div style="font-weight:500">🇬🇧 United Kingdom</div><div class="sku-cell">5.1 days</div>
+          <div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:4px;background:var(--surface3);border-radius:2px"><div style="width:96%;height:100%;background:var(--accent);border-radius:2px"></div></div><span style="font-family:var(--font-mono);font-size:10px;color:var(--accent)">96%</span></div>
+          <div class="sku-cell">1,204</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 90px 140px 70px;gap:10px;padding:11px 18px;border-bottom:1px solid var(--border);align-items:center;font-size:12px">
+          <div style="font-weight:500">🇦🇺 Australia</div><div class="sku-cell">6.8 days</div>
+          <div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:4px;background:var(--surface3);border-radius:2px"><div style="width:94%;height:100%;background:var(--accent);border-radius:2px"></div></div><span style="font-family:var(--font-mono);font-size:10px;color:var(--accent)">94%</span></div>
+          <div class="sku-cell">892</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 90px 140px 70px;gap:10px;padding:11px 18px;border-bottom:1px solid var(--border);align-items:center;font-size:12px">
+          <div style="font-weight:500">🇩🇪 Germany</div><div class="sku-cell">5.4 days</div>
+          <div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:4px;background:var(--surface3);border-radius:2px"><div style="width:97%;height:100%;background:var(--accent);border-radius:2px"></div></div><span style="font-family:var(--font-mono);font-size:10px;color:var(--accent)">97%</span></div>
+          <div class="sku-cell">743</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 90px 140px 70px;gap:10px;padding:11px 18px;border-bottom:1px solid var(--border);align-items:center;font-size:12px">
+          <div style="font-weight:500">🇨🇦 Canada</div><div class="sku-cell">5.0 days</div>
+          <div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:4px;background:var(--surface3);border-radius:2px"><div style="width:95%;height:100%;background:var(--accent);border-radius:2px"></div></div><span style="font-family:var(--font-mono);font-size:10px;color:var(--accent)">95%</span></div>
+          <div class="sku-cell">621</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 90px 140px 70px;gap:10px;padding:11px 18px;border-bottom:1px solid var(--border);align-items:center;font-size:12px">
+          <div style="font-weight:500">🇳🇱 Netherlands</div><div class="sku-cell">4.8 days</div>
+          <div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:4px;background:var(--surface3);border-radius:2px"><div style="width:99%;height:100%;background:var(--accent);border-radius:2px"></div></div><span style="font-family:var(--font-mono);font-size:10px;color:var(--accent)">99%</span></div>
+          <div class="sku-cell">418</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 90px 140px 70px;gap:10px;padding:11px 18px;align-items:center;font-size:12px;color:var(--muted)">
+          <div>+ 32 more countries</div><div style="font-family:var(--font-mono);font-size:11px">6.2 avg</div>
+          <div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:4px;background:var(--surface3);border-radius:2px"><div style="width:93%;height:100%;background:var(--muted);border-radius:2px"></div></div><span style="font-family:var(--font-mono);font-size:10px">93%</span></div>
+          <div style="font-family:var(--font-mono);font-size:11px">3,182</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CREATE INBOUND MODAL -->
+    <div id="createInboundModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)this.style.display='none'">
+      <div class="modal">
+        <div class="modal-title">Create Stock Inbound</div>
+        <div class="modal-sub">Track your shipment from supplier to warehouse in one place.</div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <select style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:9px 12px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;width:100%">
+            <option>Focal Arc Frame (FOCL-EC999002)</option><option>Focal Slim 01 (FOCL-EC999001)</option><option>Focal Round 03 (FOCL-EC999003)</option>
+          </select>
+          <input placeholder="Quantity" type="number" style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:9px 12px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;width:100%">
+          <input placeholder="Supplier" value="Guangzhou Focal Optics Co." style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:9px 12px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;width:100%">
+          <input placeholder="Tracking number" style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:9px 12px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;width:100%">
+          <input type="date" style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:9px 12px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;width:100%">
+          <input placeholder="Notes (optional)" style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:9px 12px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;width:100%">
+        </div>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" onclick="document.getElementById('createInboundModal').style.display='none'">Cancel</button>
+          <button class="btn btn-ghost" onclick="showToast('Draft saved','success')">Save Draft</button>
+          <button class="btn btn-primary" onclick="document.getElementById('createInboundModal').style.display='none';showToast('Inbound created · supplier notified','success')">Create Inbound</button>
         </div>
       </div>
     </div>
@@ -686,13 +916,13 @@ Lense Operations Team
 </div>
 
 <!-- MODALS -->
-<div id="skuModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeSkuModal()">
+<div id="skuModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)this.style.display='none'">
   <div class="modal">
     <div class="modal-title" id="skuModalTitle">SKU Details</div>
-    <div class="modal-sub" id="skuModalBody"></div>
+    <div class="modal-sub" id="skuModalBody" style="font-family:var(--font-mono);font-size:12px;line-height:1.8"></div>
     <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeSkuModal()">Close</button>
-      <button class="btn btn-primary" onclick="showSection('agent');closeSkuModal();setTimeout(startAgent,200)">▶ Run Agent for this SKU</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('skuModal').style.display='none'">Close</button>
+      <button class="btn btn-primary" onclick="showSection('agent');document.getElementById('skuModal').style.display='none';setTimeout(startAgent,200)">▶ Run Agent</button>
     </div>
   </div>
 </div>
@@ -700,11 +930,13 @@ Lense Operations Team
 <div id="addSkuModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)this.style.display='none'">
   <div class="modal">
     <div class="modal-title">Add New SKU</div>
-    <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px">
-      <input placeholder="SKU Name" style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;width:100%">
-      <input placeholder="SKU ID" style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;width:100%">
-      <input placeholder="Current Stock" type="number" style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;width:100%">
-      <input placeholder="Velocity (units/day)" type="number" style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;width:100%">
+    <div style="display:flex;flex-direction:column;gap:9px;margin-top:14px">
+      <input placeholder="SKU Name (e.g. Focal Wave 04)" class="wizard-input">
+      <input placeholder="SKU ID (e.g. FOCL-EC999004)" class="wizard-input">
+      <input placeholder="Current Stock" type="number" class="wizard-input">
+      <input placeholder="Velocity (units/day)" type="number" class="wizard-input">
+      <input placeholder="Lead Time (days)" type="number" class="wizard-input">
+      <input placeholder="COGS per unit ($)" type="number" class="wizard-input">
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="document.getElementById('addSkuModal').style.display='none'">Cancel</button>
@@ -716,10 +948,12 @@ Lense Operations Team
 <div id="addSupplierModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)this.style.display='none'">
   <div class="modal">
     <div class="modal-title">Add New Supplier</div>
-    <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px">
-      <input placeholder="Company Name" style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;width:100%">
-      <input placeholder="Contact Email" style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;width:100%">
-      <input placeholder="Lead Time (days)" type="number" style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;width:100%">
+    <div style="display:flex;flex-direction:column;gap:9px;margin-top:14px">
+      <input placeholder="Company Name" class="wizard-input">
+      <input placeholder="Contact Email" class="wizard-input">
+      <input placeholder="Location" class="wizard-input">
+      <input placeholder="Lead Time (days)" type="number" class="wizard-input">
+      <input placeholder="MOQ (minimum order)" type="number" class="wizard-input">
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="document.getElementById('addSupplierModal').style.display='none'">Cancel</button>
@@ -728,43 +962,159 @@ Lense Operations Team
   </div>
 </div>
 
+<div id="addBrandModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)this.style.display='none'">
+  <div class="modal">
+    <div class="modal-title">Add New Brand</div>
+    <div class="modal-sub">Each brand gets its own SKUs, suppliers, and agent history.</div>
+
+    <!-- Onboarding steps -->
+    <div style="display:flex;gap:6px;margin-bottom:16px" id="stepIndicator">
+      <div class="step-dot done" id="dot-0"></div>
+      <div class="step-dot" id="dot-1"></div>
+      <div class="step-dot" id="dot-2"></div>
+    </div>
+
+    <div class="onboarding-step active" id="ob-step-0">
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);margin-bottom:4px">STEP 1 OF 3 · Brand Details</div>
+      <input id="ob-brand-name" placeholder="Brand name (e.g. Arc Vision)" class="wizard-input">
+      <input id="ob-brand-shopify" placeholder="Shopify store URL" class="wizard-input">
+      <input id="ob-brand-email" placeholder="Founder email" class="wizard-input">
+    </div>
+    <div class="onboarding-step" id="ob-step-1">
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);margin-bottom:4px">STEP 2 OF 3 · First SKU</div>
+      <input placeholder="SKU Name" class="wizard-input">
+      <input placeholder="Current Stock" type="number" class="wizard-input">
+      <input placeholder="Supplier Lead Time (days)" type="number" class="wizard-input">
+    </div>
+    <div class="onboarding-step" id="ob-step-2">
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);margin-bottom:4px">STEP 3 OF 3 · Agent Settings</div>
+      <div class="setting-row" style="margin-bottom:8px"><div><div class="setting-label" style="font-size:13px">Auto-approve reorders</div></div><button class="toggle off" onclick="toggleSetting(this)"></button></div>
+      <div class="setting-row"><div><div class="setting-label" style="font-size:13px">Voice alerts</div></div><button class="toggle on" onclick="toggleSetting(this)"></button></div>
+      <input placeholder="Risk threshold (days, default 21)" type="number" class="wizard-input" style="margin-top:8px">
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="ob-back" onclick="obStep(-1)" style="display:none">← Back</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('addBrandModal').style.display='none'">Cancel</button>
+      <button class="btn btn-primary" id="ob-next" onclick="obStep(1)">Next →</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div id="toast" class="toast" style="display:none">
-  <span class="toast-icon" id="toastIcon">✓</span>
+  <span id="toastIcon">✓</span>
   <span id="toastMsg">Action complete</span>
 </div>
 
 <script>
-// ── SECTION NAV ──
-function showSection(id) {
-  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'))
-  document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'))
-  document.querySelectorAll('.sidebar-item').forEach(l => l.classList.remove('active'))
-  document.getElementById('section-'+id).classList.add('active')
-  document.querySelectorAll('.nav-link').forEach(l => { if(l.getAttribute('onclick')?.includes(id)) l.classList.add('active') })
-  document.querySelectorAll('.sidebar-item').forEach(l => { if(l.getAttribute('onclick')?.includes(id)) l.classList.add('active') })
+// ══ BRAND DATA ══
+const BRANDS = {
+  focal:  { name:'Focal Eyewear',  days:'8.9', stock:'3,614', critical:'FOCAL ARC FRAME' },
+  lens:   { name:'LensLab Co.',    days:'14.2',stock:'2,210', critical:'LENSLAB PRO 02' },
+  arc:    { name:'Arc Vision',     days:'6.1', stock:'5,040', critical:'ARC TITAN FRAME' },
+}
+let currentBrand = 'focal'
+
+function switchBrand(id, name, e) {
+  e.stopPropagation()
+  currentBrand = id
+  const b = BRANDS[id]
+  document.getElementById('currentBrandLabel').textContent = 'brand: ' + b.name
+  document.getElementById('overview-brand-label').textContent = b.name
+  document.getElementById('agent-brand-label').textContent = 'brand: ' + b.name
+  document.getElementById('m-days').textContent = b.days
+  document.getElementById('m-stock').textContent = b.stock
+  document.getElementById('m-critical-sku').textContent = b.critical
+  document.getElementById('side-days').textContent = b.days
+  document.querySelectorAll('.brand-option').forEach(o => o.classList.remove('active'))
+  e.target.closest('.brand-option').classList.add('active')
+  document.getElementById('brandDropdown').classList.remove('open')
+  showToast('Switched to ' + b.name, 'success')
 }
 
-// ── AGENT TRACE ──
+function toggleBrandDropdown() {
+  document.getElementById('brandDropdown').classList.toggle('open')
+}
+document.addEventListener('click', e => {
+  if(!e.target.closest('#brandSwitcher')) document.getElementById('brandDropdown').classList.remove('open')
+})
+
+// ══ SECTION NAV ══
+function showSection(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'))
+  document.querySelectorAll('.sidebar-item').forEach(l => l.classList.remove('active'))
+  document.getElementById('section-'+id).classList.add('active')
+  const navEl = document.getElementById('nav-'+id)
+  if(navEl) navEl.classList.add('active')
+  if(window.innerWidth <= 900) document.getElementById('sidebar').classList.remove('open')
+}
+
+// ══ SIDEBAR ══
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open')
+}
+
+// ══ SYNC INDICATOR ══
+let syncSecs = 0
+setInterval(() => {
+  syncSecs++
+  const el = document.getElementById('syncText')
+  if(syncSecs < 60) el.textContent = `synced ${syncSecs}s ago`
+  else el.textContent = `synced ${Math.floor(syncSecs/60)}m ago`
+}, 1000)
+function refreshTable() {
+  syncSecs = 0
+  document.getElementById('syncText').textContent = 'synced just now'
+  showToast('Inventory refreshed','success')
+}
+
+// ══ SCHEDULE ══
+let scheduleSecs = 7200, scheduleRunning = true, scheduleInterval = null
+function startSchedule() {
+  scheduleInterval = setInterval(() => {
+    if(!scheduleRunning) return
+    scheduleSecs = Math.max(0, scheduleSecs-1)
+    const h=String(Math.floor(scheduleSecs/3600)).padStart(2,'0')
+    const m=String(Math.floor((scheduleSecs%3600)/60)).padStart(2,'0')
+    const s=String(scheduleSecs%60).padStart(2,'0')
+    const t = `${h}:${m}:${s}`
+    const el1=document.getElementById('scheduleCountdown')
+    const el2=document.getElementById('nextRunTimer')
+    if(el1) el1.textContent=t
+    if(el2) el2.textContent=t
+    if(scheduleSecs===0) { scheduleSecs=7200; showToast('Agent auto-run triggered','success') }
+  },1000)
+}
+startSchedule()
+function toggleSchedule(btn) {
+  scheduleRunning = btn.classList.contains('on')
+}
+function updateScheduleInterval(hrs) {
+  scheduleSecs = parseInt(hrs)*3600
+  showToast('Schedule updated to every '+hrs+' hours','success')
+}
+
+// ══ AGENT ══
 const LINES = [
-  {tag:'WATCH', msg:'Polling inventory · <span class="trace-hi">3 SKUs</span> · brand: Lense', d:400},
-  {tag:'WATCH', msg:'Lense 5to9 · stock: 1592 · velocity: 47/day · days_left: <span class="trace-hi">33.9</span> ✓', d:900},
-  {tag:'WATCH', msg:'Lense Drop 001 · stock: <span class="trace-warn">428</span> · velocity: 48/day · days_left: <span class="trace-danger">8.9</span> ⚠', d:1300},
-  {tag:'WATCH', msg:'Lense Drop 001 Yellow · stock: 1594 · velocity: 31/day · days_left: <span class="trace-warn">21.0</span>', d:1700},
-  {tag:'RISK',  msg:'Threshold breach · Lense Drop 001 · lead_time: <span class="trace-warn">21 days</span> · coverage: <span class="trace-danger">8.9 days</span>', d:2200},
-  {tag:'THINK', msg:'Invoking Claude · reasoning over stockout risk...', d:2700},
-  {tag:'THINK', msg:'<span class="trace-dim">›</span> velocity trend: +12% WoW · ad spend: Meta campaign active', d:3100},
-  {tag:'THINK', msg:'<span class="trace-dim">›</span> reorder qty: 48/day × 30 buffer + 21 lead = <span class="trace-hi">800 units</span>', d:3500},
-  {tag:'THINK', msg:'<span class="trace-dim">›</span> COGS: $12.50 · order value: <span class="trace-warn">$10,000</span> · recommendation: reorder now', d:3900},
-  {tag:'ACT',   msg:'Drafting supplier email · Guangzhou Lense Optics Co.', d:4400},
-  {tag:'ACT',   msg:'Email drafted · queued · auto-sends in <span class="trace-warn">02:00:00</span>', d:5000},
-  {tag:'ALERT', msg:'ElevenLabs · playing voice alert to founder...', d:5500},
+  {tag:'WATCH',msg:'Polling inventory · <span class="trace-hi">3 SKUs</span> · brand: Focal',d:400},
+  {tag:'WATCH',msg:'Focal Slim 01 · stock: 1592 · velocity: 47/day · days_left: <span class="trace-hi">33.9</span> ✓',d:900},
+  {tag:'WATCH',msg:'Focal Arc Frame · stock: <span class="trace-warn">428</span> · velocity: 48/day · days_left: <span class="trace-danger">8.9</span> ⚠',d:1300},
+  {tag:'WATCH',msg:'Focal Round 03 · stock: 1594 · velocity: 31/day · days_left: <span class="trace-warn">21.0</span>',d:1700},
+  {tag:'RISK', msg:'Threshold breach · Focal Arc Frame · lead_time: <span class="trace-warn">21 days</span> · coverage: <span class="trace-danger">8.9 days</span>',d:2200},
+  {tag:'THINK',msg:'Invoking Claude · reasoning over stockout risk...',d:2700},
+  {tag:'THINK',msg:'<span class="trace-dim">›</span> velocity trend: +12% WoW · Meta ad campaign active',d:3100},
+  {tag:'THINK',msg:'<span class="trace-dim">›</span> reorder qty: 48/day × 30 buffer + 21 lead = <span class="trace-hi">800 units</span>',d:3500},
+  {tag:'THINK',msg:'<span class="trace-dim">›</span> order value: <span class="trace-warn">$10,000</span> · COGS: $12.50 · decision: reorder now',d:3900},
+  {tag:'ACT',  msg:'Drafting supplier email · Guangzhou Focal Optics Co.',d:4400},
+  {tag:'ACT',  msg:'Email drafted · queued for approval · auto-sends in <span class="trace-warn">02:00:00</span>',d:5000},
+  {tag:'ALERT',msg:'ElevenLabs · playing voice alert to founder...',d:5500},
+  {tag:'ACT',  msg:'Action logged to Snowflake · audit trail updated',d:6000},
 ]
-const TAG_CLASS = {WATCH:'tag-watch',THINK:'tag-think',ACT:'tag-act',RISK:'tag-risk',ALERT:'tag-alert'}
+const TAG_CLASS={WATCH:'tag-watch',THINK:'tag-think',ACT:'tag-act',RISK:'tag-risk',ALERT:'tag-alert',REPLY:'tag-reply'}
+let agentRunning=false,countdownInt=null,countdownSecs=7200,editMode=false
 
-let agentRunning=false, countdownInterval=null, countdownSecs=7200, editMode=false
-
-function startAgent() {
+function startAgent(){
   if(agentRunning) return
   agentRunning=true
   document.getElementById('runBtn').disabled=true
@@ -774,34 +1124,33 @@ function startAgent() {
   document.getElementById('emailPanel').style.display='none'
   document.getElementById('agentActiveBadge').style.display='flex'
   document.getElementById('agentIdleBadge').style.display='none'
-
-  const body = document.getElementById('traceBody')
+  document.getElementById('alertBadge').style.display='none'
+  const body=document.getElementById('traceBody')
   body.innerHTML=''
-
-  LINES.forEach((l,i) => {
-    setTimeout(() => {
-      const now = new Date().toLocaleTimeString('en-US',{hour12:false})
-      const div = document.createElement('div')
+  LINES.forEach((l,i)=>{
+    setTimeout(()=>{
+      const now=new Date().toLocaleTimeString('en-US',{hour12:false})
+      const div=document.createElement('div')
       div.className='trace-line'
       div.innerHTML=`<span class="trace-time">${now}</span><span class="trace-tag ${TAG_CLASS[l.tag]}">${l.tag}</span><span class="trace-msg">${l.msg}</span>`
       body.appendChild(div)
       body.scrollTop=body.scrollHeight
-      if(i===LINES.length-1) {
+      if(i===LINES.length-1){
         setTimeout(()=>{
           document.getElementById('termLive').style.display='none'
           document.getElementById('emailPanel').style.display='block'
-          document.getElementById('runBtn').textContent='✓ Agent complete'
+          document.getElementById('runBtn').textContent='✓ Complete'
           document.getElementById('resetBtn').style.display='inline-flex'
           startCountdown()
-        },600)
+        },500)
       }
-    }, l.d)
+    },l.d)
   })
 }
 
-function startCountdown() {
+function startCountdown(){
   countdownSecs=7200
-  countdownInterval=setInterval(()=>{
+  countdownInt=setInterval(()=>{
     countdownSecs=Math.max(0,countdownSecs-1)
     const h=String(Math.floor(countdownSecs/3600)).padStart(2,'0')
     const m=String(Math.floor((countdownSecs%3600)/60)).padStart(2,'0')
@@ -811,92 +1160,166 @@ function startCountdown() {
   },1000)
 }
 
-function approveEmail() {
-  clearInterval(countdownInterval)
+function approveEmail(){
+  clearInterval(countdownInt)
   document.getElementById('emailActions').style.display='none'
-  const result=document.getElementById('emailResult')
-  result.style.display='block'
-  result.style.color='var(--accent)'
-  result.innerHTML='✓ Email sent to wei@guangzhou-lense.cn · Logged to Snowflake · Action complete'
+  const r=document.getElementById('emailResult')
+  r.style.display='block';r.style.color='var(--accent)'
+  r.innerHTML='✓ Email sent to wei@guangzhou-focal.cn · Logged to Snowflake'
   document.getElementById('agentActiveBadge').style.display='none'
   document.getElementById('agentIdleBadge').style.display='inline'
-  addAuditRow('Reorder approved & sent · 800 units · $10,000','DHOD5-EC999009','Sent','status-sent')
-  showToast('Reorder email sent to supplier','success')
+  addAuditRow('Reorder approved & sent · 800 units · $10,000','FOCL-EC999002','Sent','status-sent')
+  // Simulate supplier reply
+  setTimeout(()=>{
+    document.getElementById('supplierReply').style.display='block'
+    const body=document.getElementById('traceBody')
+    const now=new Date().toLocaleTimeString('en-US',{hour12:false})
+    const div=document.createElement('div');div.className='trace-line'
+    div.innerHTML=`<span class="trace-time">${now}</span><span class="trace-tag tag-reply">REPLY</span><span class="trace-msg" style="color:#4ade80">Supplier confirmed · 800 units · ships Monday ✓</span>`
+    body.appendChild(div);body.scrollTop=body.scrollHeight
+    showToast('Supplier replied — confirmed!','success')
+    updateMetrics()
+  },2500)
+  showToast('Reorder sent to supplier','success')
 }
 
-function cancelEmail() {
-  clearInterval(countdownInterval)
+function updateMetrics(){
+  const cur=parseInt(document.getElementById('m-actions').textContent)||3
+  document.getElementById('m-actions').textContent=cur+1
+  document.getElementById('side-actions').textContent=cur+1
+  const cur2=parseInt(document.getElementById('logBadge').textContent)||3
+  document.getElementById('logBadge').textContent=cur2+1
+}
+
+function cancelEmail(){
+  clearInterval(countdownInt)
   document.getElementById('emailActions').style.display='none'
-  const result=document.getElementById('emailResult')
-  result.style.display='block'
-  result.style.color='var(--muted)'
-  result.innerHTML='✗ Action cancelled by founder'
+  const r=document.getElementById('emailResult')
+  r.style.display='block';r.style.color='var(--muted)'
+  r.innerHTML='✗ Action cancelled by founder'
   document.getElementById('agentActiveBadge').style.display='none'
   document.getElementById('agentIdleBadge').style.display='inline'
-  addAuditRow('Reorder cancelled by founder','DHOD5-EC999009','Cancelled','status-cancelled')
+  addAuditRow('Reorder cancelled by founder','FOCL-EC999002','Cancelled','status-cancelled')
   showToast('Action cancelled','error')
 }
 
-function toggleEdit() {
+function toggleEdit(){
   editMode=!editMode
-  document.getElementById('emailBodyDisplay').style.display=editMode?'none':'block'
-  document.getElementById('emailBodyEdit').style.display=editMode?'block':'none'
-  document.getElementById('editBtn').textContent=editMode?'✓ Done':'✏ Edit'
-  if(!editMode) showToast('Email updated','success')
+  showToast(editMode?'Email unlocked for editing':'Email locked','success')
 }
 
-function resetAgent() {
-  agentRunning=false
-  clearInterval(countdownInterval)
+function resetAgent(){
+  agentRunning=false;clearInterval(countdownInt)
   document.getElementById('runBtn').disabled=false
   document.getElementById('runBtn').textContent='▶ Run Agent'
   document.getElementById('resetBtn').style.display='none'
   document.getElementById('emailPanel').style.display='none'
   document.getElementById('emailActions').style.display='flex'
   document.getElementById('emailResult').style.display='none'
+  document.getElementById('supplierReply').style.display='none'
   document.getElementById('termLive').style.display='none'
   document.getElementById('agentActiveBadge').style.display='none'
   document.getElementById('agentIdleBadge').style.display='inline'
-  editMode=false
-  document.getElementById('emailBodyDisplay').style.display='block'
-  document.getElementById('emailBodyEdit').style.display='none'
-  document.getElementById('editBtn').textContent='✏ Edit'
+  document.getElementById('alertBadge').style.display='inline'
   document.getElementById('traceBody').innerHTML='<div style="font-family:var(--font-mono);font-size:12px;color:var(--muted);padding:20px 0;text-align:center">Click "Run Agent" to start the autonomous loop</div>'
 }
 
-// ── MODALS ──
-const SKU_DATA = {
-  lense5to9:{title:'Lense 5to9 — DHOD5-EC999002',body:'Stock: 1,592 units · Velocity: 47/day · Days left: 33.9 · Lead time: 21 days · COGS: $10.00 · Status: Healthy · No action required.'},
-  lensedrop001:{title:'Lense Drop 001 — DHOD5-EC999009 ⚠',body:'Stock: 428 units · Velocity: 48/day · Days left: 8.9 · Lead time: 21 days · COGS: $12.50 · Status: CRITICAL — stockout imminent. Agent recommends immediate reorder of 800 units ($10,000).'},
-  lensedrop001y:{title:'Lense Drop 001 Yellow — DHOD5-EC999003',body:'Stock: 1,594 units · Velocity: 31/day · Days left: 21.0 · Lead time: 21 days · COGS: $12.50 · Status: Watch — at threshold. Monitor closely.'},
+// ══ SKU MODALS ══
+const SKU_DATA={
+  slim01:{title:'Focal Slim 01 — FOCL-EC999001',body:'Stock: 1,592 units\nVelocity: 47/day\nDays left: 33.9\nLead time: 21 days\nCOGS: $10.00\nStatus: Healthy — no action required.'},
+  arcframe:{title:'Focal Arc Frame — FOCL-EC999002 ⚠',body:'Stock: 428 units\nVelocity: 48/day\nDays left: 8.9 ← CRITICAL\nLead time: 21 days\nCOGS: $12.50\nRecommended reorder: 800 units ($10,000)'},
+  round03:{title:'Focal Round 03 — FOCL-EC999003',body:'Stock: 1,594 units\nVelocity: 31/day\nDays left: 21.0 ← At threshold\nLead time: 21 days\nCOGS: $12.50\nStatus: Watch — monitor closely.'},
 }
-function openSkuModal(id) { document.getElementById('skuModalTitle').textContent=SKU_DATA[id].title; document.getElementById('skuModalBody').textContent=SKU_DATA[id].body; document.getElementById('skuModal').style.display='flex' }
-function closeSkuModal() { document.getElementById('skuModal').style.display='none' }
-function showAddSkuModal() { document.getElementById('addSkuModal').style.display='flex' }
-function showAddSupplierModal() { document.getElementById('addSupplierModal').style.display='flex' }
+function openSkuModal(id){
+  document.getElementById('skuModalTitle').textContent=SKU_DATA[id].title
+  document.getElementById('skuModalBody').textContent=SKU_DATA[id].body
+  document.getElementById('skuModal').style.display='flex'
+}
 
-// ── AUDIT LOG ──
-function addAuditRow(action,sku,label,cls) {
+// ══ ONBOARDING ══
+let obCurrentStep=0
+function obStep(dir){
+  const newStep=obCurrentStep+dir
+  if(newStep<0||newStep>2) return
+  document.getElementById('ob-step-'+obCurrentStep).classList.remove('active')
+  document.getElementById('dot-'+obCurrentStep).classList.remove('done')
+  obCurrentStep=newStep
+  document.getElementById('ob-step-'+obCurrentStep).classList.add('active')
+  for(let i=0;i<=obCurrentStep;i++) document.getElementById('dot-'+i).classList.add('done')
+  document.getElementById('ob-back').style.display=obCurrentStep>0?'inline-flex':'none'
+  if(obCurrentStep===2){
+    document.getElementById('ob-next').textContent='Create Brand →'
+    document.getElementById('ob-next').onclick=finishOnboarding
+  } else {
+    document.getElementById('ob-next').textContent='Next →'
+    document.getElementById('ob-next').onclick=()=>obStep(1)
+  }
+}
+function finishOnboarding(){
+  const name=document.getElementById('ob-brand-name').value||'New Brand'
+  document.getElementById('addBrandModal').style.display='none'
+  obCurrentStep=0
+  showToast(name+' added successfully','success')
+}
+function showAddBrandModal(e){
+  e.stopPropagation()
+  document.getElementById('brandDropdown').classList.remove('open')
+  obCurrentStep=0
+  document.querySelectorAll('.onboarding-step').forEach(s=>s.classList.remove('active'))
+  document.getElementById('ob-step-0').classList.add('active')
+  document.querySelectorAll('.step-dot').forEach(d=>d.classList.remove('done'))
+  document.getElementById('dot-0').classList.add('done')
+  document.getElementById('ob-back').style.display='none'
+  document.getElementById('ob-next').textContent='Next →'
+  document.getElementById('ob-next').onclick=()=>obStep(1)
+  document.getElementById('addBrandModal').style.display='flex'
+}
+
+// ══ AUDIT ══
+function addAuditRow(action,sku,label,cls){
   const now=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})
-  const row=document.createElement('div'); row.className='audit-row'
+  const row=document.createElement('div');row.className='audit-row'
   row.innerHTML=`<div class="audit-time">Today ${now}</div><div class="audit-action">${action}</div><div class="audit-sku">${sku}</div><div><span class="audit-status ${cls}">${label}</span></div>`
   document.getElementById('auditRows').prepend(row)
 }
 
-// ── TOAST ──
+// ══ TOAST ══
 let toastTimer=null
-function showToast(msg,type='success') {
-  const t=document.getElementById('toast'); t.className=`toast ${type}`
+function showToast(msg,type='success'){
+  const t=document.getElementById('toast');t.className=`toast ${type}`
   document.getElementById('toastMsg').textContent=msg
   document.getElementById('toastIcon').textContent=type==='success'?'✓':'✗'
-  t.style.display='flex'; clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.style.display='none',3000)
+  t.style.display='flex';clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.style.display='none',3000)
 }
 
-// ── MISC ──
-function toggleSetting(btn) { btn.classList.toggle('on'); btn.classList.toggle('off'); showToast('Setting updated','success') }
-function refreshTable() { showToast('Inventory refreshed','success') }
-function showSkuAlert() { openSkuModal('lensedrop001') }
-function filterSkus(v) { document.querySelectorAll('#inventoryRows .sku-row').forEach(r=>{ r.style.display=r.textContent.toLowerCase().includes(v.toLowerCase())?'grid':'none' }) }
+// ══ MISC ══
+function toggleSetting(btn){btn.classList.toggle('on');btn.classList.toggle('off');showToast('Setting updated','success')}
+function showAddSkuModal(){document.getElementById('addSkuModal').style.display='flex'}
+function showAddSupplierModal(){document.getElementById('addSupplierModal').style.display='flex'}
+function filterSkus(v){document.querySelectorAll('#inventoryRows .sku-row').forEach(r=>{r.style.display=r.textContent.toLowerCase().includes(v.toLowerCase())?'grid':'none'})}
+
+
+  function filterInbounds(type, btn) {
+    btn.closest('div').querySelectorAll('button').forEach(b => {
+      b.style.background = 'none'; b.style.color = 'var(--muted2)';
+      b.style.border = '1px solid var(--border2)'
+    })
+    btn.style.background = 'var(--accent-dim)'; btn.style.color = 'var(--accent)';
+    btn.style.border = '1px solid var(--accent-mid)'
+    document.querySelectorAll('#inboundRows .sku-row').forEach(r => {
+      if (type === 'all') r.style.display = 'grid'
+      else r.style.display = r.dataset.inbStatus === type ? 'grid' : 'none'
+    })
+  }
+  function openInboundDetail(ref) {
+    const data = {
+      '031': 'INB-2026-031 · Focal Arc Frame\n800 units · Guangzhou Focal Optics\nTracking: SF7492823 · ETA May 31, 2026\nStatus: In Transit\nCreated by ChainAgent after reorder approved.',
+      '029': 'INB-2026-029 · Focal Round 03\n400 units · Guangzhou Focal Optics\nStatus: Awaiting Approval\nETA: Jun 12, 2026\nDraft auto-created by ChainAgent. Approve to notify supplier.',
+      '025': 'INB-2026-025 · Focal Round 03 ⚠\nDeclared: 200 units · Received: 150 units\nShortfall: 50 units\nStatus: Discrepancy\nContact supplier to resolve or issue credit note.',
+    }
+    if (data[ref]) showToast(data[ref].split('\n')[0], 'success')
+  }
+
 </script>
 </body>
 </html>

@@ -279,7 +279,7 @@ export default function Home() {
           <a href="#how">How it works</a>
           <a href="#dashboard">Dashboard</a>
           <a href="#stack">Stack</a>
-          <Link href="/dashboard" className="nav-cta">Open dashboard</Link>
+          <Link href="/login" className="nav-cta">Open dashboard</Link>
         </div>
       </nav>
 
@@ -398,7 +398,7 @@ export default function Home() {
         <div className="cta-box">
           <h2 className="cta-title">Your last stockout<br />just happened.</h2>
           <p className="cta-sub">ChainAgent catches the next one before you even know it&apos;s coming — and handles it while you sleep.</p>
-          <Link href="/dashboard">
+          <Link href="/login">
             <button className="btn-primary" style={{ fontSize: 14, padding: '16px 36px' }}>Open dashboard</button>
           </Link>
         </div>
