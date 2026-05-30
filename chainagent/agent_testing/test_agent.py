@@ -51,40 +51,79 @@ def test_data():
 
 # ── 5. test: elevenlabs voice ─────────────────────────────────────────────────
 def test_voice():
-    from elevenlabs.client import ElevenLabs
-    from elevenlabs import stream
-
     api_key = os.getenv("ELEVENLABS_API_KEY")
     voice_id = os.getenv("ELEVENLABS_VOICE_ID")
 
     assert api_key, "ELEVENLABS_API_KEY is missing from .env"
     assert voice_id, "ELEVENLABS_VOICE_ID is missing from .env"
 
-    client = ElevenLabs(api_key=api_key)
-
-    audio_stream = client.text_to_speech.stream(
-        voice_id=voice_id,
-        text="Alert: critical stock level detected for Widget A. Reorder immediately.",
-        model_id="eleven_flash_v2_5"
-    )
+    from agent.elevenlabs import trigger_voice
 
     emit("VOICE", "Playing audio live...")
-    stream(audio_stream)
+    trigger_voice(
+        {"name": "Widget A"},
+        1.5,
+    )
     emit("VOICE", "Playback complete")
 
-# ── 6. test: full agent run (mocks voice + snowflake) ────────────────────────
+# ── 6. test: snowflake connection and insert ──────────────────────────────────
+def test_snowflake():
+    import snowflake.connector
+
+    user     = os.getenv("SNOWFLAKE_USER")
+    password = os.getenv("SNOWFLAKE_PASSWORD")
+    account  = os.getenv("SNOWFLAKE_ACCOUNT")
+
+    assert user,     "SNOWFLAKE_USER is missing from .env"
+    assert password, "SNOWFLAKE_PASSWORD is missing from .env"
+    assert account,  "SNOWFLAKE_ACCOUNT is missing from .env"
+
+    conn = snowflake.connector.connect(
+        user=user,
+        password=password,
+        account=account,
+    )
+    cursor = conn.cursor()
+
+    # insert a test row
+    cursor.execute(
+        "INSERT INTO CHAINAGENT.PUBLIC.agent_actions (timestamp, sku_id, sku_name, days_left, reasoning, email_draft, status) VALUES (CURRENT_TIMESTAMP, %s, %s, %s, %s, %s, 'pending')",
+        ("TEST-001", "Test SKU", 5.0, "This is a test reasoning entry.", "This is a test email draft.")
+    )
+    conn.commit()
+
+    # read it back
+    cursor.execute("SELECT * FROM CHAINAGENT.PUBLIC.agent_actions ORDER BY timestamp DESC LIMIT 1")
+    row = cursor.fetchone()
+    assert row is not None, "No rows found — insert failed"
+    emit("SNOWFLAKE", f"Row inserted and retrieved: {row}")
+
+    cursor.close()
+    conn.close()
+
+# ── 7. test: full agent run (mocks voice + snowflake) ────────────────────────
 def test_agent():
     import agent.chain_agent as agent_module
+    import agent.elevenlabs as voice_module
+    import agent.snowflake_log as snowflake_module
 
-    agent_module.trigger_voice = lambda sku, days: emit("VOICE", f"[stubbed] alert for {sku['name']}")
-    agent_module.log_snowflake = lambda sku, reasoning, email: emit("SNOWFLAKE", "[stubbed] log call")
+    def stub_voice(sku, days):
+        emit("VOICE", f"[stubbed] alert for {sku['name']}")
+
+    def stub_snowflake(sku, reasoning, email, days):
+        emit("SNOWFLAKE", "[stubbed] log call")
+
+    voice_module.trigger_voice = stub_voice
+    snowflake_module.log_snowflake = stub_snowflake
+    agent_module.trigger_voice = stub_voice
+    agent_module.log_snowflake = stub_snowflake
 
     emit("AGENT", "Starting full agent run...")
     agent_module.run_agent(emit)
 
 # ── run all ───────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    tests = [test_env, test_client, test_generate, test_data, test_voice, test_agent]
+    tests = [test_env, test_client, test_generate, test_data, test_voice, test_snowflake, test_agent]
     for test in tests:
         print(f"\n{'─'*50}")
         print(f"Running: {test.__name__}")
