@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChainAgent — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=JetBrains+Mono:wght@300;400;500&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#060809;--surface:#0c0f12;--surface2:#121820;--surface3:#1a2030;
+  --border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.12);
+  --text:#e8edf2;--muted:#5a6478;--muted2:#8a97aa;
+  --accent:#00e5a0;--accent-dim:rgba(0,229,160,0.1);--accent-mid:rgba(0,229,160,0.2);
+  --blue:#4a9eff;--blue-dim:rgba(74,158,255,0.1);
+  --purple:#a78bfa;--purple-dim:rgba(167,139,250,0.1);
+  --amber:#f59e0b;--amber-dim:rgba(245,158,11,0.1);
+  --red:#ef4444;--red-dim:rgba(239,68,68,0.08);
+  --font-display:'Syne',sans-serif;
+  --font-mono:'JetBrains Mono',monospace;
+  --font-body:'DM Sans',sans-serif;
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-size:14px;line-height:1.6;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(255,255,255,0.012) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.012) 1px,transparent 1px);background-size:56px 56px;pointer-events:none;z-index:0}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:200;display:flex;align-items:center;justify-content:space-between;padding:0 32px;height:56px;border-bottom:1px solid var(--border);background:rgba(6,8,9,0.92);backdrop-filter:blur(16px)}
+.nav-left{display:flex;align-items:center;gap:24px}
+.nav-logo{font-family:var(--font-display);font-weight:800;font-size:16px;letter-spacing:-0.02em;color:var(--text);text-decoration:none;display:flex;align-items:center;gap:8px}
+.nav-logo .live-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:pulse-dot 2s infinite}
+.nav-links{display:flex;gap:2px}
+.nav-link{font-family:var(--font-mono);font-size:11px;letter-spacing:0.04em;color:var(--muted);text-decoration:none;padding:6px 12px;border-radius:6px;transition:all 0.15s}
+.nav-link:hover,.nav-link.active{color:var(--text);background:var(--surface2)}
+.nav-link.active{color:var(--accent)}
+.nav-right{display:flex;align-items:center;gap:12px}
+.agent-status{display:flex;align-items:center;gap:7px;font-family:var(--font-mono);font-size:11px;color:var(--accent);background:var(--accent-dim);padding:5px 12px;border-radius:100px;border:1px solid var(--accent-mid)}
+.agent-status .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse-dot 1.5s infinite}
+.brand-tag{font-family:var(--font-mono);font-size:10px;color:var(--muted);background:var(--surface2);padding:4px 10px;border-radius:100px;border:1px solid var(--border2)}
+
+/* LAYOUT */
+.layout{display:grid;grid-template-columns:220px 1fr;min-height:100vh;padding-top:56px;position:relative;z-index:1}
+
+/* SIDEBAR */
+.sidebar{border-right:1px solid var(--border);background:var(--surface);padding:24px 0;position:sticky;top:56px;height:calc(100vh - 56px);overflow-y:auto;display:flex;flex-direction:column}
+.sidebar-section{padding:0 16px;margin-bottom:28px}
+.sidebar-label{font-family:var(--font-mono);font-size:9px;letter-spacing:0.15em;color:var(--muted);text-transform:uppercase;padding:0 8px;margin-bottom:6px}
+.sidebar-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;transition:all 0.15s;color:var(--muted2);font-size:13px;border:none;background:none;width:100%;text-align:left}
+.sidebar-item:hover{background:var(--surface2);color:var(--text)}
+.sidebar-item.active{background:var(--accent-dim);color:var(--accent);border:1px solid var(--accent-mid)}
+.sidebar-icon{width:16px;text-align:center;flex-shrink:0;font-size:14px}
+.sidebar-badge{margin-left:auto;font-family:var(--font-mono);font-size:9px;background:var(--red-dim);color:var(--red);padding:2px 6px;border-radius:100px}
+.sidebar-badge.green{background:var(--accent-dim);color:var(--accent)}
+.sidebar-divider{height:1px;background:var(--border);margin:8px 16px}
+.sidebar-bottom{margin-top:auto;padding:16px}
+.sidebar-metric{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px}
+.sidebar-metric-val{font-family:var(--font-display);font-size:22px;font-weight:800;color:var(--text);letter-spacing:-0.02em}
+.sidebar-metric-label{font-family:var(--font-mono);font-size:9px;color:var(--muted);letter-spacing:0.08em;margin-top:2px}
+
+/* MAIN */
+.main{padding:28px 32px;display:flex;flex-direction:column;gap:20px;overflow:hidden}
+
+/* TOP METRICS */
+.metrics-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.metric-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;transition:border-color 0.2s}
+.metric-card:hover{border-color:var(--border2)}
+.metric-card.alert{border-color:rgba(239,68,68,0.3);background:var(--red-dim)}
+.metric-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px}
+.metric-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px}
+.metric-trend{font-family:var(--font-mono);font-size:10px;padding:2px 7px;border-radius:100px}
+.trend-up{background:var(--accent-dim);color:var(--accent)}
+.trend-down{background:var(--red-dim);color:var(--red)}
+.trend-neutral{background:var(--surface2);color:var(--muted)}
+.metric-val{font-family:var(--font-display);font-size:28px;font-weight:800;letter-spacing:-0.03em;color:var(--text);line-height:1}
+.metric-val.red{color:var(--red)}
+.metric-label{font-family:var(--font-mono);font-size:10px;color:var(--muted);margin-top:4px;letter-spacing:0.05em}
+
+/* SKU TABLE */
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.panel-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border);background:var(--surface2)}
+.panel-title{font-family:var(--font-display);font-size:14px;font-weight:700;letter-spacing:-0.01em;display:flex;align-items:center;gap:8px}
+.panel-actions{display:flex;gap:8px;align-items:center}
+.btn{font-family:var(--font-mono);font-size:11px;font-weight:500;letter-spacing:0.04em;padding:7px 14px;border-radius:7px;border:none;cursor:pointer;transition:all 0.15s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:var(--accent);color:#060809}
+.btn-primary:hover{opacity:0.88;transform:translateY(-1px)}
+.btn-primary:disabled{opacity:0.4;cursor:not-allowed;transform:none}
+.btn-ghost{background:var(--surface);color:var(--muted2);border:1px solid var(--border2)}
+.btn-ghost:hover{background:var(--surface2);color:var(--text)}
+.btn-danger{background:var(--red-dim);color:var(--red);border:1px solid rgba(239,68,68,0.2)}
+.btn-danger:hover{background:rgba(239,68,68,0.15)}
+.btn-approve{background:var(--accent);color:#060809;font-size:12px;padding:9px 20px}
+.btn-approve:hover{opacity:0.88}
+.btn-edit{background:var(--surface2);color:var(--muted2);border:1px solid var(--border2);font-size:12px;padding:9px 18px}
+.btn-cancel-sm{background:none;color:var(--muted);border:none;font-size:12px;padding:9px 14px;cursor:pointer;font-family:var(--font-mono)}
+
+.sku-table-head{display:grid;grid-template-columns:2fr 80px 90px 80px 90px 100px 110px;padding:10px 20px;border-bottom:1px solid var(--border)}
+.sku-th{font-family:var(--font-mono);font-size:9px;letter-spacing:0.12em;color:var(--muted);text-transform:uppercase}
+.sku-row{display:grid;grid-template-columns:2fr 80px 90px 80px 90px 100px 110px;padding:14px 20px;border-bottom:1px solid var(--border);align-items:center;transition:background 0.15s;cursor:pointer}
+.sku-row:last-child{border-bottom:none}
+.sku-row:hover{background:var(--surface2)}
+.sku-row.critical{background:rgba(239,68,68,0.03)}
+.sku-row.critical:hover{background:rgba(239,68,68,0.06)}
+.sku-name{font-size:13px;font-weight:500;color:var(--text)}
+.sku-id{font-family:var(--font-mono);font-size:9px;color:var(--muted);margin-top:2px}
+.sku-cell{font-family:var(--font-mono);font-size:12px;color:var(--text)}
+.sku-cell.dim{color:var(--muted2)}
+.sku-cell.red{color:var(--red);font-weight:500}
+.sku-cell.amber{color:var(--amber)}
+.risk-pill{font-family:var(--font-mono);font-size:10px;font-weight:500;padding:3px 9px;border-radius:4px;display:inline-block}
+.risk-ok{background:rgba(34,197,94,0.12);color:#4ade80}
+.risk-watch{background:var(--amber-dim);color:var(--amber)}
+.risk-critical{background:var(--red-dim);color:var(--red);animation:flicker 2s infinite}
+.agent-active{font-family:var(--font-mono);font-size:10px;color:var(--accent);display:flex;align-items:center;gap:5px}
+.agent-active .dot{width:5px;height:5px;border-radius:50%;background:var(--accent);animation:pulse-dot 1.5s infinite}
+
+/* GRID 2 COL */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+
+/* TERMINAL / TRACE */
+.terminal{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.terminal-header{display:flex;align-items:center;gap:8px;padding:12px 18px;border-bottom:1px solid var(--border);background:var(--surface2)}
+.t-dot{width:10px;height:10px;border-radius:50%}
+.t-red{background:#ef4444}.t-yellow{background:#f59e0b}.t-green{background:#22c55e}
+.t-title{font-family:var(--font-mono);font-size:10px;color:var(--muted);margin-left:8px}
+.t-live{margin-left:auto;display:flex;align-items:center;gap:5px;font-family:var(--font-mono);font-size:10px;color:var(--accent)}
+.t-live .dot{width:5px;height:5px;border-radius:50%;background:var(--accent);animation:pulse-dot 1.5s infinite}
+.trace-body{padding:16px 20px;max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:1px}
+.trace-line{display:flex;gap:10px;align-items:flex-start;font-family:var(--font-mono);font-size:11px;line-height:1.7;animation:fadeIn 0.3s both}
+.trace-time{color:var(--muted);flex-shrink:0;font-size:10px;padding-top:1px}
+.trace-tag{font-size:9px;font-weight:500;padding:2px 7px;border-radius:3px;flex-shrink:0;min-width:50px;text-align:center;margin-top:2px}
+.tag-watch{background:var(--blue-dim);color:var(--blue)}
+.tag-think{background:var(--purple-dim);color:var(--purple)}
+.tag-act{background:var(--accent-dim);color:var(--accent)}
+.tag-risk{background:var(--red-dim);color:var(--red)}
+.tag-alert{background:var(--amber-dim);color:var(--amber)}
+.trace-msg{color:var(--text)}
+.trace-hi{color:var(--accent)}
+.trace-warn{color:var(--amber)}
+.trace-dim{color:var(--muted2)}
+.trace-danger{color:var(--red)}
+.trace-divider{height:1px;background:var(--border);margin:8px 0}
+.trace-cursor{color:var(--muted);animation:blink 1s infinite;font-size:13px}
+
+/* EMAIL PANEL */
+.email-panel{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:14px;overflow:hidden;animation:slideUp 0.4s both}
+.email-header{padding:16px 20px;border-bottom:1px solid var(--border);background:var(--surface2)}
+.email-fields{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
+.email-field{display:flex;gap:12px;align-items:flex-start;font-family:var(--font-mono);font-size:12px}
+.email-field-label{color:var(--muted);min-width:60px;flex-shrink:0}
+.email-field-val{color:var(--text)}
+.email-field-val.editable{background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:4px 10px;outline:none;color:var(--text);font-family:var(--font-mono);font-size:12px;width:100%;transition:border-color 0.2s}
+.email-field-val.editable:focus{border-color:var(--accent)}
+.email-body-area{padding:16px 20px;border-bottom:1px solid var(--border)}
+.email-body-text{font-family:var(--font-mono);font-size:11px;line-height:1.9;color:var(--text);background:var(--surface2);border-radius:8px;padding:14px 16px;white-space:pre-wrap}
+.email-body-text.editable-area{border:1px solid var(--border2);outline:none;width:100%;resize:vertical;min-height:120px;transition:border-color 0.2s}
+.email-body-text.editable-area:focus{border-color:var(--accent)}
+.email-accent{color:var(--accent)}
+.email-actions{padding:14px 20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.countdown-timer{margin-left:auto;font-family:var(--font-mono);font-size:11px;color:var(--amber);display:flex;align-items:center;gap:6px}
+
+/* AUDIT LOG */
+.audit-row{display:grid;grid-template-columns:100px 1fr 90px 80px;gap:12px;padding:10px 20px;border-bottom:1px solid var(--border);align-items:center;font-size:12px}
+.audit-row:last-child{border-bottom:none}
+.audit-time{font-family:var(--font-mono);font-size:10px;color:var(--muted)}
+.audit-action{color:var(--text)}
+.audit-sku{font-family:var(--font-mono);font-size:10px;color:var(--muted2)}
+.audit-status{font-family:var(--font-mono);font-size:10px;padding:2px 8px;border-radius:4px;text-align:center}
+.status-sent{background:var(--accent-dim);color:var(--accent)}
+.status-pending{background:var(--amber-dim);color:var(--amber)}
+.status-cancelled{background:var(--surface2);color:var(--muted)}
+
+/* SPARK CHARTS */
+.spark{display:flex;align-items:flex-end;gap:2px;height:32px}
+.spark-bar{flex:1;border-radius:2px 2px 0 0;background:var(--accent-dim);transition:height 0.3s}
+.spark-bar.hi{background:var(--accent)}
+.spark-bar.red{background:var(--red-dim)}
+.spark-bar.red.hi{background:var(--red)}
+
+/* SETTINGS PANEL */
+.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:20px}
+.setting-row{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--surface2);border-radius:10px;border:1px solid var(--border)}
+.setting-label{font-size:13px;color:var(--text)}
+.setting-sub{font-family:var(--font-mono);font-size:10px;color:var(--muted);margin-top:2px}
+.toggle{width:40px;height:22px;border-radius:100px;border:none;cursor:pointer;position:relative;transition:background 0.2s}
+.toggle.on{background:var(--accent)}
+.toggle.off{background:var(--surface3)}
+.toggle::after{content:'';position:absolute;top:3px;width:16px;height:16px;border-radius:50%;background:white;transition:left 0.2s}
+.toggle.on::after{left:21px}
+.toggle.off::after{left:3px}
+.input-field{background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:6px 10px;color:var(--text);font-family:var(--font-mono);font-size:11px;outline:none;transition:border-color 0.2s;width:100px}
+.input-field:focus{border-color:var(--accent)}
+
+/* SUPPLIER CARD */
+.supplier-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.supplier-name{font-size:13px;font-weight:500;color:var(--text);margin-bottom:4px}
+.supplier-detail{font-family:var(--font-mono);font-size:10px;color:var(--muted);line-height:1.7}
+.supplier-status{display:inline-flex;align-items:center;gap:4px;font-family:var(--font-mono);font-size:10px;color:var(--accent);margin-top:6px}
+
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);z-index:500;display:flex;align-items:center;justify-content:center;animation:fadeIn 0.2s both}
+.modal{background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:28px;max-width:480px;width:90%;animation:slideUp 0.3s both}
+.modal-title{font-family:var(--font-display);font-size:18px;font-weight:700;margin-bottom:8px;letter-spacing:-0.02em}
+.modal-sub{font-size:13px;color:var(--muted2);margin-bottom:20px;line-height:1.6}
+.modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:24px}
+
+/* TOAST */
+.toast{position:fixed;bottom:24px;right:24px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:12px 18px;font-family:var(--font-mono);font-size:12px;color:var(--text);z-index:600;display:flex;align-items:center;gap:10px;animation:slideUp 0.3s both;box-shadow:0 8px 32px rgba(0,0,0,0.4)}
+.toast.success{border-color:var(--accent-mid)}
+.toast.success .toast-icon{color:var(--accent)}
+.toast.error{border-color:rgba(239,68,68,0.3)}
+.toast.error .toast-icon{color:var(--red)}
+
+/* PAGE SECTIONS */
+.section{display:none}
+.section.active{display:flex;flex-direction:column;gap:20px}
+
+/* ANIMS */
+@keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.3;transform:scale(0.7)}}
+@keyframes flicker{0%,100%{opacity:1}50%{opacity:0.5}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:2px}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-left">
+    <a href="index.html" class="nav-logo">
+      <span class="live-dot"></span>
+      ChainAgent
+    </a>
+    <div class="nav-links">
+      <a class="nav-link active" onclick="showSection('overview')">Overview</a>
+      <a class="nav-link" onclick="showSection('agent')">Agent</a>
+      <a class="nav-link" onclick="showSection('inventory')">Inventory</a>
+      <a class="nav-link" onclick="showSection('suppliers')">Suppliers</a>
+      <a class="nav-link" onclick="showSection('logs')">Audit Log</a>
+      <a class="nav-link" onclick="showSection('settings')">Settings</a>
+    </div>
+  </div>
+  <div class="nav-right">
+    <span class="brand-tag">brand: Lense</span>
+    <div class="agent-status">
+      <span class="dot"></span>
+      Agent ready
+    </div>
+  </div>
+</nav>
+
+<div class="layout">
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">Monitor</div>
+      <button class="sidebar-item active" onclick="showSection('overview')"><span class="sidebar-icon">◈</span>Overview</button>
+      <button class="sidebar-item" onclick="showSection('agent')"><span class="sidebar-icon">⚡</span>Run Agent<span class="sidebar-badge">1 alert</span></button>
+      <button class="sidebar-item" onclick="showSection('inventory')"><span class="sidebar-icon">◫</span>Inventory</button>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-label">Manage</div>
+      <button class="sidebar-item" onclick="showSection('suppliers')"><span class="sidebar-icon">◉</span>Suppliers</button>
+      <button class="sidebar-item" onclick="showSection('logs')"><span class="sidebar-icon">≡</span>Audit Log<span class="sidebar-badge green">3</span></button>
+      <button class="sidebar-item" onclick="showSection('settings')"><span class="sidebar-icon">◎</span>Settings</button>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-bottom">
+      <div class="sidebar-metric">
+        <div class="sidebar-metric-val" id="side-days">8.9</div>
+        <div class="sidebar-metric-label">DAYS TO STOCKOUT</div>
+      </div>
+      <div class="sidebar-metric" style="border-color:rgba(239,68,68,0.2);background:var(--red-dim)">
+        <div class="sidebar-metric-val" style="color:var(--red)">1</div>
+        <div class="sidebar-metric-label">CRITICAL SKUs</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="main">
+
+    <!-- ══════ OVERVIEW ══════ -->
+    <div id="section-overview" class="section active">
+
+      <!-- Metrics -->
+      <div class="metrics-row">
+        <div class="metric-card alert">
+          <div class="metric-top">
+            <div class="metric-icon" style="background:var(--red-dim)">🚨</div>
+            <span class="metric-trend trend-down">Critical</span>
+          </div>
+          <div class="metric-val red">8.9</div>
+          <div class="metric-label">DAYS TO STOCKOUT · LENSE DROP 001</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-top">
+            <div class="metric-icon" style="background:var(--accent-dim)">📦</div>
+            <span class="metric-trend trend-up">+12% WoW</span>
+          </div>
+          <div class="metric-val">3,614</div>
+          <div class="metric-label">TOTAL UNITS IN STOCK</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-top">
+            <div class="metric-icon" style="background:var(--blue-dim)">⚡</div>
+            <span class="metric-trend trend-up">Active</span>
+          </div>
+          <div class="metric-val">126</div>
+          <div class="metric-label">UNITS SOLD TODAY</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-top">
+            <div class="metric-icon" style="background:var(--purple-dim)">✓</div>
+            <span class="metric-trend trend-neutral">This week</span>
+          </div>
+          <div class="metric-val">3</div>
+          <div class="metric-label">AGENT ACTIONS TAKEN</div>
+        </div>
+      </div>
+
+      <!-- SKU Table + Spark Charts -->
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">📊 Live SKU Risk Monitor</div>
+          <div class="panel-actions">
+            <button class="btn btn-ghost" onclick="refreshTable()">↻ Refresh</button>
+            <button class="btn btn-primary" onclick="showSection('agent');setTimeout(startAgent,200)">▶ Run Agent</button>
+          </div>
+        </div>
+        <div class="sku-table-head">
+          <div class="sku-th">Product</div>
+          <div class="sku-th">Stock</div>
+          <div class="sku-th">Velocity</div>
+          <div class="sku-th">Days Left</div>
+          <div class="sku-th">Risk Score</div>
+          <div class="sku-th">Risk</div>
+          <div class="sku-th">Agent</div>
+        </div>
+        <div class="sku-row" onclick="openSkuModal('lense5to9')">
+          <div><div class="sku-name">Lense 5to9</div><div class="sku-id">DHOD5-EC999002</div></div>
+          <div class="sku-cell">1,592</div>
+          <div class="sku-cell">47/day</div>
+          <div class="sku-cell">33.9</div>
+          <div class="sku-cell">
+            <div class="spark">
+              <div class="spark-bar" style="height:30%"></div><div class="spark-bar" style="height:40%"></div>
+              <div class="spark-bar" style="height:35%"></div><div class="spark-bar" style="height:50%"></div>
+              <div class="spark-bar" style="height:45%"></div><div class="spark-bar hi" style="height:60%"></div>
+            </div>
+          </div>
+          <div class="sku-cell"><span class="risk-pill risk-ok">Healthy</span></div>
+          <div class="sku-cell dim">Monitoring</div>
+        </div>
+        <div class="sku-row critical" onclick="openSkuModal('lensedrop001')">
+          <div><div class="sku-name">Lense Drop 001</div><div class="sku-id">DHOD5-EC999009</div></div>
+          <div class="sku-cell">428</div>
+          <div class="sku-cell">48/day</div>
+          <div class="sku-cell red">8.9</div>
+          <div class="sku-cell">
+            <div class="spark">
+              <div class="spark-bar red" style="height:40%"></div><div class="spark-bar red" style="height:55%"></div>
+              <div class="spark-bar red" style="height:70%"></div><div class="spark-bar red" style="height:80%"></div>
+              <div class="spark-bar red" style="height:90%"></div><div class="spark-bar red hi" style="height:100%"></div>
+            </div>
+          </div>
+          <div class="sku-cell"><span class="risk-pill risk-critical">Critical</span></div>
+          <div class="sku-cell"><div class="agent-active" id="agentActiveBadge" style="display:none"><span class="dot"></span>Acting now</div><span id="agentIdleBadge" style="font-family:var(--font-mono);font-size:10px;color:var(--muted)">—</span></div>
+        </div>
+        <div class="sku-row" onclick="openSkuModal('lensedrop001y')">
+          <div><div class="sku-name">Lense Drop 001 Yellow</div><div class="sku-id">DHOD5-EC999003</div></div>
+          <div class="sku-cell">1,594</div>
+          <div class="sku-cell">31/day</div>
+          <div class="sku-cell amber">21.0</div>
+          <div class="sku-cell">
+            <div class="spark">
+              <div class="spark-bar" style="height:20%"></div><div class="spark-bar" style="height:30%"></div>
+              <div class="spark-bar" style="height:28%"></div><div class="spark-bar" style="height:35%"></div>
+              <div class="spark-bar" style="height:40%"></div><div class="spark-bar hi" style="height:45%"></div>
+            </div>
+          </div>
+          <div class="sku-cell"><span class="risk-pill risk-watch">Watch</span></div>
+          <div class="sku-cell dim">Monitoring</div>
+        </div>
+      </div>
+
+      <!-- Quick actions row -->
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">⚡ Quick Actions</div></div>
+          <div style="padding:16px;display:flex;flex-direction:column;gap:8px">
+            <button class="btn btn-primary" style="width:100%;justify-content:center;padding:12px" onclick="showSection('agent');setTimeout(startAgent,200)">▶ Run Agent Now</button>
+            <button class="btn btn-ghost" style="width:100%;justify-content:center;padding:12px" onclick="showSection('logs')">≡ View Audit Log</button>
+            <button class="btn btn-ghost" style="width:100%;justify-content:center;padding:12px" onclick="showSection('suppliers')">◉ Manage Suppliers</button>
+            <button class="btn btn-danger" style="width:100%;justify-content:center;padding:12px" onclick="showSkuAlert()">🚨 View Critical Alert</button>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">📈 Velocity Trend (7d)</div></div>
+          <div style="padding:20px">
+            <div style="display:flex;flex-direction:column;gap:14px">
+              <div>
+                <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:11px;color:var(--muted);margin-bottom:6px"><span>Lense Drop 001</span><span style="color:var(--red)">48/day ↑</span></div>
+                <div style="height:6px;background:var(--surface2);border-radius:3px"><div style="height:100%;width:96%;background:var(--red);border-radius:3px"></div></div>
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:11px;color:var(--muted);margin-bottom:6px"><span>Lense 5to9</span><span style="color:var(--accent)">47/day →</span></div>
+                <div style="height:6px;background:var(--surface2);border-radius:3px"><div style="height:100%;width:94%;background:var(--accent);border-radius:3px"></div></div>
+              </div>
+              <div>
+                <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:11px;color:var(--muted);margin-bottom:6px"><span>Drop 001 Yellow</span><span style="color:var(--blue)">31/day →</span></div>
+                <div style="height:6px;background:var(--surface2);border-radius:3px"><div style="height:100%;width:62%;background:var(--blue);border-radius:3px"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════ AGENT ══════ -->
+    <div id="section-agent" class="section">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:4px">// autonomous agent</div>
+          <h2 style="font-family:var(--font-display);font-size:24px;font-weight:800;letter-spacing:-0.03em">Agent Control Center</h2>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost" id="resetBtn" onclick="resetAgent()" style="display:none">↺ Reset</button>
+          <button class="btn btn-primary" id="runBtn" onclick="startAgent()">▶ Run Agent</button>
+        </div>
+      </div>
+
+      <!-- Trace Terminal -->
+      <div class="terminal">
+        <div class="terminal-header">
+          <span class="t-dot t-red"></span><span class="t-dot t-yellow"></span><span class="t-dot t-green"></span>
+          <span class="t-title">chainagent-runtime · brand: Lense · 3 SKUs monitored</span>
+          <div class="t-live" id="termLive" style="display:none"><span class="dot"></span>agent running</div>
+        </div>
+        <div class="trace-body" id="traceBody">
+          <div style="font-family:var(--font-mono);font-size:12px;color:var(--muted);padding:20px 0;text-align:center">
+            Click "Run Agent" to start the autonomous loop
+          </div>
+        </div>
+      </div>
+
+      <!-- Email panel -->
+      <div class="email-panel" id="emailPanel" style="display:none">
+        <div class="email-header">
+          <div class="panel-title">📧 Drafted Supplier Email — awaiting your approval</div>
+        </div>
+        <div class="email-fields">
+          <div class="email-field"><span class="email-field-label">To:</span><span class="email-field-val">wei@guangzhou-lense.cn</span></div>
+          <div class="email-field"><span class="email-field-label">Subject:</span><span class="email-field-val">Urgent Reorder — Lense Drop 001 · 800 units</span></div>
+        </div>
+        <div class="email-body-area">
+          <div id="emailBodyDisplay" class="email-body-text">Hi Wei,
+
+We need to place an urgent reorder for <span class="email-accent">800 units</span> of Lense Drop 001 (SKU: DHOD5-EC999009).
+
+Current stock covers approximately <span class="email-accent">9 days</span>. Our lead time is 21 days, putting us at risk of stockout. Please confirm availability and the earliest possible ship date.
+
+Total order value: <span class="email-accent">$10,000 USD</span> (800 units × $12.50 COGS)
+
+Best regards,
+Lense Operations Team
+
+<span style="color:var(--muted)">— Sent by ChainAgent on behalf of Lense</span></div>
+          <textarea id="emailBodyEdit" class="email-body-text editable-area" style="display:none">Hi Wei,
+
+We need to place an urgent reorder for 800 units of Lense Drop 001 (SKU: DHOD5-EC999009).
+
+Current stock covers approximately 9 days. Our lead time is 21 days, putting us at risk of stockout. Please confirm availability and the earliest possible ship date.
+
+Total order value: $10,000 USD (800 units × $12.50 COGS)
+
+Best regards,
+Lense Operations Team
+
+— Sent by ChainAgent on behalf of Lense</textarea>
+        </div>
+        <div class="email-actions" id="emailActions">
+          <button class="btn btn-approve" id="approveBtn" onclick="approveEmail()">✓ Approve & Send</button>
+          <button class="btn btn-edit" id="editBtn" onclick="toggleEdit()">✏ Edit</button>
+          <button class="btn-cancel-sm" onclick="cancelEmail()">Cancel</button>
+          <div class="countdown-timer" id="countdown">⏱ auto-sending in <span id="countdownVal">02:00:00</span></div>
+        </div>
+        <div id="emailResult" style="display:none;padding:14px 20px;font-family:var(--font-mono);font-size:12px"></div>
+      </div>
+    </div>
+
+    <!-- ══════ INVENTORY ══════ -->
+    <div id="section-inventory" class="section">
+      <div style="font-family:var(--font-display);font-size:24px;font-weight:800;letter-spacing:-0.03em;margin-bottom:4px">Inventory Details</div>
+      <div class="grid-3">
+        <div class="panel" style="grid-column:1/-1">
+          <div class="panel-header">
+            <div class="panel-title">All SKUs</div>
+            <div class="panel-actions">
+              <input placeholder="Search SKUs..." style="background:var(--surface2);border:1px solid var(--border2);border-radius:6px;padding:6px 12px;color:var(--text);font-family:var(--font-mono);font-size:11px;outline:none;width:180px" oninput="filterSkus(this.value)">
+              <button class="btn btn-primary" onclick="showAddSkuModal()">+ Add SKU</button>
+            </div>
+          </div>
+          <div class="sku-table-head" style="grid-template-columns:2fr 80px 90px 80px 80px 80px 90px">
+            <div class="sku-th">Product</div>
+            <div class="sku-th">Stock</div>
+            <div class="sku-th">Velocity</div>
+            <div class="sku-th">Days Left</div>
+            <div class="sku-th">Lead Time</div>
+            <div class="sku-th">COGS</div>
+            <div class="sku-th">Risk</div>
+          </div>
+          <div id="inventoryRows">
+            <div class="sku-row" style="grid-template-columns:2fr 80px 90px 80px 80px 80px 90px">
+              <div><div class="sku-name">Lense 5to9</div><div class="sku-id">DHOD5-EC999002</div></div>
+              <div class="sku-cell">1,592</div><div class="sku-cell">47/day</div>
+              <div class="sku-cell">33.9</div><div class="sku-cell">21 days</div>
+              <div class="sku-cell">$10.00</div>
+              <div><span class="risk-pill risk-ok">Healthy</span></div>
+            </div>
+            <div class="sku-row critical" style="grid-template-columns:2fr 80px 90px 80px 80px 80px 90px">
+              <div><div class="sku-name">Lense Drop 001</div><div class="sku-id">DHOD5-EC999009</div></div>
+              <div class="sku-cell">428</div><div class="sku-cell">48/day</div>
+              <div class="sku-cell red">8.9</div><div class="sku-cell">21 days</div>
+              <div class="sku-cell">$12.50</div>
+              <div><span class="risk-pill risk-critical">Critical</span></div>
+            </div>
+            <div class="sku-row" style="grid-template-columns:2fr 80px 90px 80px 80px 80px 90px">
+              <div><div class="sku-name">Lense Drop 001 Yellow</div><div class="sku-id">DHOD5-EC999003</div></div>
+              <div class="sku-cell">1,594</div><div class="sku-cell">31/day</div>
+              <div class="sku-cell amber">21.0</div><div class="sku-cell">21 days</div>
+              <div class="sku-cell">$12.50</div>
+              <div><span class="risk-pill risk-watch">Watch</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════ SUPPLIERS ══════ -->
+    <div id="section-suppliers" class="section">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <div style="font-family:var(--font-display);font-size:24px;font-weight:800;letter-spacing:-0.03em">Supplier Network</div>
+        <button class="btn btn-primary" onclick="showAddSupplierModal()">+ Add Supplier</button>
+      </div>
+      <div class="grid-2">
+        <div class="supplier-card">
+          <div class="supplier-name">Guangzhou Lense Optics Co.</div>
+          <div class="supplier-detail">
+            Contact: Wei Zhang · wei@guangzhou-lense.cn<br>
+            Location: Guangzhou, China · Lead time: 21 days<br>
+            MOQ: 500 units · Payment: Net-30
+          </div>
+          <div class="supplier-status"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent);display:inline-block"></span>Active · 3 SKUs</div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="btn btn-ghost" style="font-size:10px;padding:5px 10px" onclick="showToast('Email drafted to Wei Zhang','success')">📧 Email</button>
+            <button class="btn btn-ghost" style="font-size:10px;padding:5px 10px" onclick="showToast('Opening supplier profile','success')">◉ Profile</button>
+          </div>
+        </div>
+        <div class="supplier-card">
+          <div class="supplier-name">Shenzhen Optical Partners Ltd.</div>
+          <div class="supplier-detail">
+            Contact: Amy Liu · amy@sz-optical.cn<br>
+            Location: Shenzhen, China · Lead time: 18 days<br>
+            MOQ: 300 units · Payment: Net-45
+          </div>
+          <div class="supplier-status"><span style="width:6px;height:6px;border-radius:50%;background:var(--muted);display:inline-block"></span>Backup supplier</div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="btn btn-ghost" style="font-size:10px;padding:5px 10px" onclick="showToast('Email drafted to Amy Liu','success')">📧 Email</button>
+            <button class="btn btn-ghost" style="font-size:10px;padding:5px 10px" onclick="showToast('Opening supplier profile','success')">◉ Profile</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════ AUDIT LOG ══════ -->
+    <div id="section-logs" class="section">
+      <div style="font-family:var(--font-display);font-size:24px;font-weight:800;letter-spacing:-0.03em;margin-bottom:4px">Audit Log</div>
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">≡ All Agent Actions</div>
+          <div class="panel-actions">
+            <button class="btn btn-ghost" onclick="showToast('Exported to CSV','success')">↓ Export CSV</button>
+          </div>
+        </div>
+        <div class="audit-row" style="background:var(--surface2);border-bottom:1px solid var(--border)">
+          <div class="sku-th">Time</div><div class="sku-th">Action</div><div class="sku-th">SKU</div><div class="sku-th">Status</div>
+        </div>
+        <div id="auditRows">
+          <div class="audit-row">
+            <div class="audit-time">Today 09:14</div>
+            <div class="audit-action">Reorder email drafted · 800 units · $10,000</div>
+            <div class="audit-sku">DHOD5-EC999009</div>
+            <div><span class="audit-status status-pending">Pending</span></div>
+          </div>
+          <div class="audit-row">
+            <div class="audit-time">Yesterday 14:22</div>
+            <div class="audit-action">Reorder approved & sent · 500 units · $5,000</div>
+            <div class="audit-sku">DHOD5-EC999002</div>
+            <div><span class="audit-status status-sent">Sent</span></div>
+          </div>
+          <div class="audit-row">
+            <div class="audit-time">May 28 11:05</div>
+            <div class="audit-action">Risk threshold breach detected · monitoring</div>
+            <div class="audit-sku">DHOD5-EC999003</div>
+            <div><span class="audit-status status-sent">Resolved</span></div>
+          </div>
+          <div class="audit-row">
+            <div class="audit-time">May 26 08:30</div>
+            <div class="audit-action">Reorder cancelled by founder</div>
+            <div class="audit-sku">DHOD5-EC999009</div>
+            <div><span class="audit-status status-cancelled">Cancelled</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════ SETTINGS ══════ -->
+    <div id="section-settings" class="section">
+      <div style="font-family:var(--font-display);font-size:24px;font-weight:800;letter-spacing:-0.03em;margin-bottom:4px">Settings</div>
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">◎ Agent Configuration</div></div>
+        <div class="settings-grid">
+          <div class="setting-row">
+            <div><div class="setting-label">Auto-approve reorders</div><div class="setting-sub">Send without manual approval</div></div>
+            <button class="toggle off" onclick="toggleSetting(this)"></button>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">Voice alerts</div><div class="setting-sub">ElevenLabs audio notifications</div></div>
+            <button class="toggle on" onclick="toggleSetting(this)"></button>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">Snowflake logging</div><div class="setting-sub">Log all actions to warehouse</div></div>
+            <button class="toggle on" onclick="toggleSetting(this)"></button>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">Email notifications</div><div class="setting-sub">Notify founder on action</div></div>
+            <button class="toggle on" onclick="toggleSetting(this)"></button>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">Risk threshold (days)</div><div class="setting-sub">Alert when stock falls below</div></div>
+            <input class="input-field" type="number" value="21" onchange="showToast('Threshold updated','success')">
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">Auto-send window (hrs)</div><div class="setting-sub">Hours before auto-approve</div></div>
+            <input class="input-field" type="number" value="2" onchange="showToast('Window updated','success')">
+          </div>
+        </div>
+        <div style="padding:16px 20px;border-top:1px solid var(--border)">
+          <button class="btn btn-primary" onclick="showToast('Settings saved','success')">Save Changes</button>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">🔌 API Connections</div></div>
+        <div style="padding:16px 20px;display:flex;flex-direction:column;gap:10px">
+          <div class="setting-row">
+            <div><div class="setting-label">Shopify</div><div class="setting-sub" style="color:var(--accent)">● Connected · dev store</div></div>
+            <button class="btn btn-ghost" style="font-size:10px;padding:5px 10px" onclick="showToast('Shopify reconnected','success')">Reconnect</button>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">Claude API</div><div class="setting-sub" style="color:var(--accent)">● Connected</div></div>
+            <button class="btn btn-ghost" style="font-size:10px;padding:5px 10px" onclick="showToast('API key updated','success')">Update Key</button>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">ElevenLabs</div><div class="setting-sub" style="color:var(--accent)">● Connected</div></div>
+            <button class="btn btn-ghost" style="font-size:10px;padding:5px 10px" onclick="showToast('API key updated','success')">Update Key</button>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">Snowflake</div><div class="setting-sub" style="color:var(--amber)">◎ Pending setup</div></div>
+            <button class="btn btn-primary" style="font-size:10px;padding:5px 12px" onclick="showToast('Opening Snowflake setup','success')">Connect</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- MODALS -->
+<div id="skuModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeSkuModal()">
+  <div class="modal">
+    <div class="modal-title" id="skuModalTitle">SKU Details</div>
+    <div class="modal-sub" id="skuModalBody"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeSkuModal()">Close</button>
+      <button class="btn btn-primary" onclick="showSection('agent');closeSkuModal();setTimeout(startAgent,200)">▶ Run Agent for this SKU</button>
+    </div>
+  </div>
+</div>
+
+<div id="addSkuModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)this.style.display='none'">
+  <div class="modal">
+    <div class="modal-title">Add New SKU</div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px">
+      <input placeholder="SKU Name" style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;width:100%">
+      <input placeholder="SKU ID" style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;width:100%">
+      <input placeholder="Current Stock" type="number" style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;width:100%">
+      <input placeholder="Velocity (units/day)" type="number" style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;width:100%">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="document.getElementById('addSkuModal').style.display='none'">Cancel</button>
+      <button class="btn btn-primary" onclick="document.getElementById('addSkuModal').style.display='none';showToast('SKU added successfully','success')">Add SKU</button>
+    </div>
+  </div>
+</div>
+
+<div id="addSupplierModal" class="modal-overlay" style="display:none" onclick="if(event.target===this)this.style.display='none'">
+  <div class="modal">
+    <div class="modal-title">Add New Supplier</div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px">
+      <input placeholder="Company Name" style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;width:100%">
+      <input placeholder="Contact Email" style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;width:100%">
+      <input placeholder="Lead Time (days)" type="number" style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;color:var(--text);font-family:var(--font-mono);font-size:12px;outline:none;width:100%">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="document.getElementById('addSupplierModal').style.display='none'">Cancel</button>
+      <button class="btn btn-primary" onclick="document.getElementById('addSupplierModal').style.display='none';showToast('Supplier added','success')">Add Supplier</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast" class="toast" style="display:none">
+  <span class="toast-icon" id="toastIcon">✓</span>
+  <span id="toastMsg">Action complete</span>
+</div>
+
+<script>
+// ── SECTION NAV ──
+function showSection(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'))
+  document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'))
+  document.querySelectorAll('.sidebar-item').forEach(l => l.classList.remove('active'))
+  document.getElementById('section-'+id).classList.add('active')
+  document.querySelectorAll('.nav-link').forEach(l => { if(l.getAttribute('onclick')?.includes(id)) l.classList.add('active') })
+  document.querySelectorAll('.sidebar-item').forEach(l => { if(l.getAttribute('onclick')?.includes(id)) l.classList.add('active') })
+}
+
+// ── AGENT TRACE ──
+const LINES = [
+  {tag:'WATCH', msg:'Polling inventory · <span class="trace-hi">3 SKUs</span> · brand: Lense', d:400},
+  {tag:'WATCH', msg:'Lense 5to9 · stock: 1592 · velocity: 47/day · days_left: <span class="trace-hi">33.9</span> ✓', d:900},
+  {tag:'WATCH', msg:'Lense Drop 001 · stock: <span class="trace-warn">428</span> · velocity: 48/day · days_left: <span class="trace-danger">8.9</span> ⚠', d:1300},
+  {tag:'WATCH', msg:'Lense Drop 001 Yellow · stock: 1594 · velocity: 31/day · days_left: <span class="trace-warn">21.0</span>', d:1700},
+  {tag:'RISK',  msg:'Threshold breach · Lense Drop 001 · lead_time: <span class="trace-warn">21 days</span> · coverage: <span class="trace-danger">8.9 days</span>', d:2200},
+  {tag:'THINK', msg:'Invoking Claude · reasoning over stockout risk...', d:2700},
+  {tag:'THINK', msg:'<span class="trace-dim">›</span> velocity trend: +12% WoW · ad spend: Meta campaign active', d:3100},
+  {tag:'THINK', msg:'<span class="trace-dim">›</span> reorder qty: 48/day × 30 buffer + 21 lead = <span class="trace-hi">800 units</span>', d:3500},
+  {tag:'THINK', msg:'<span class="trace-dim">›</span> COGS: $12.50 · order value: <span class="trace-warn">$10,000</span> · recommendation: reorder now', d:3900},
+  {tag:'ACT',   msg:'Drafting supplier email · Guangzhou Lense Optics Co.', d:4400},
+  {tag:'ACT',   msg:'Email drafted · queued · auto-sends in <span class="trace-warn">02:00:00</span>', d:5000},
+  {tag:'ALERT', msg:'ElevenLabs · playing voice alert to founder...', d:5500},
+]
+const TAG_CLASS = {WATCH:'tag-watch',THINK:'tag-think',ACT:'tag-act',RISK:'tag-risk',ALERT:'tag-alert'}
+
+let agentRunning=false, countdownInterval=null, countdownSecs=7200, editMode=false
+
+function startAgent() {
+  if(agentRunning) return
+  agentRunning=true
+  document.getElementById('runBtn').disabled=true
+  document.getElementById('runBtn').textContent='⏳ Running...'
+  document.getElementById('termLive').style.display='flex'
+  document.getElementById('resetBtn').style.display='none'
+  document.getElementById('emailPanel').style.display='none'
+  document.getElementById('agentActiveBadge').style.display='flex'
+  document.getElementById('agentIdleBadge').style.display='none'
+
+  const body = document.getElementById('traceBody')
+  body.innerHTML=''
+
+  LINES.forEach((l,i) => {
+    setTimeout(() => {
+      const now = new Date().toLocaleTimeString('en-US',{hour12:false})
+      const div = document.createElement('div')
+      div.className='trace-line'
+      div.innerHTML=`<span class="trace-time">${now}</span><span class="trace-tag ${TAG_CLASS[l.tag]}">${l.tag}</span><span class="trace-msg">${l.msg}</span>`
+      body.appendChild(div)
+      body.scrollTop=body.scrollHeight
+      if(i===LINES.length-1) {
+        setTimeout(()=>{
+          document.getElementById('termLive').style.display='none'
+          document.getElementById('emailPanel').style.display='block'
+          document.getElementById('runBtn').textContent='✓ Agent complete'
+          document.getElementById('resetBtn').style.display='inline-flex'
+          startCountdown()
+        },600)
+      }
+    }, l.d)
+  })
+}
+
+function startCountdown() {
+  countdownSecs=7200
+  countdownInterval=setInterval(()=>{
+    countdownSecs=Math.max(0,countdownSecs-1)
+    const h=String(Math.floor(countdownSecs/3600)).padStart(2,'0')
+    const m=String(Math.floor((countdownSecs%3600)/60)).padStart(2,'0')
+    const s=String(countdownSecs%60).padStart(2,'0')
+    const el=document.getElementById('countdownVal')
+    if(el) el.textContent=`${h}:${m}:${s}`
+  },1000)
+}
+
+function approveEmail() {
+  clearInterval(countdownInterval)
+  document.getElementById('emailActions').style.display='none'
+  const result=document.getElementById('emailResult')
+  result.style.display='block'
+  result.style.color='var(--accent)'
+  result.innerHTML='✓ Email sent to wei@guangzhou-lense.cn · Logged to Snowflake · Action complete'
+  document.getElementById('agentActiveBadge').style.display='none'
+  document.getElementById('agentIdleBadge').style.display='inline'
+  addAuditRow('Reorder approved & sent · 800 units · $10,000','DHOD5-EC999009','Sent','status-sent')
+  showToast('Reorder email sent to supplier','success')
+}
+
+function cancelEmail() {
+  clearInterval(countdownInterval)
+  document.getElementById('emailActions').style.display='none'
+  const result=document.getElementById('emailResult')
+  result.style.display='block'
+  result.style.color='var(--muted)'
+  result.innerHTML='✗ Action cancelled by founder'
+  document.getElementById('agentActiveBadge').style.display='none'
+  document.getElementById('agentIdleBadge').style.display='inline'
+  addAuditRow('Reorder cancelled by founder','DHOD5-EC999009','Cancelled','status-cancelled')
+  showToast('Action cancelled','error')
+}
+
+function toggleEdit() {
+  editMode=!editMode
+  document.getElementById('emailBodyDisplay').style.display=editMode?'none':'block'
+  document.getElementById('emailBodyEdit').style.display=editMode?'block':'none'
+  document.getElementById('editBtn').textContent=editMode?'✓ Done':'✏ Edit'
+  if(!editMode) showToast('Email updated','success')
+}
+
+function resetAgent() {
+  agentRunning=false
+  clearInterval(countdownInterval)
+  document.getElementById('runBtn').disabled=false
+  document.getElementById('runBtn').textContent='▶ Run Agent'
+  document.getElementById('resetBtn').style.display='none'
+  document.getElementById('emailPanel').style.display='none'
+  document.getElementById('emailActions').style.display='flex'
+  document.getElementById('emailResult').style.display='none'
+  document.getElementById('termLive').style.display='none'
+  document.getElementById('agentActiveBadge').style.display='none'
+  document.getElementById('agentIdleBadge').style.display='inline'
+  editMode=false
+  document.getElementById('emailBodyDisplay').style.display='block'
+  document.getElementById('emailBodyEdit').style.display='none'
+  document.getElementById('editBtn').textContent='✏ Edit'
+  document.getElementById('traceBody').innerHTML='<div style="font-family:var(--font-mono);font-size:12px;color:var(--muted);padding:20px 0;text-align:center">Click "Run Agent" to start the autonomous loop</div>'
+}
+
+// ── MODALS ──
+const SKU_DATA = {
+  lense5to9:{title:'Lense 5to9 — DHOD5-EC999002',body:'Stock: 1,592 units · Velocity: 47/day · Days left: 33.9 · Lead time: 21 days · COGS: $10.00 · Status: Healthy · No action required.'},
+  lensedrop001:{title:'Lense Drop 001 — DHOD5-EC999009 ⚠',body:'Stock: 428 units · Velocity: 48/day · Days left: 8.9 · Lead time: 21 days · COGS: $12.50 · Status: CRITICAL — stockout imminent. Agent recommends immediate reorder of 800 units ($10,000).'},
+  lensedrop001y:{title:'Lense Drop 001 Yellow — DHOD5-EC999003',body:'Stock: 1,594 units · Velocity: 31/day · Days left: 21.0 · Lead time: 21 days · COGS: $12.50 · Status: Watch — at threshold. Monitor closely.'},
+}
+function openSkuModal(id) { document.getElementById('skuModalTitle').textContent=SKU_DATA[id].title; document.getElementById('skuModalBody').textContent=SKU_DATA[id].body; document.getElementById('skuModal').style.display='flex' }
+function closeSkuModal() { document.getElementById('skuModal').style.display='none' }
+function showAddSkuModal() { document.getElementById('addSkuModal').style.display='flex' }
+function showAddSupplierModal() { document.getElementById('addSupplierModal').style.display='flex' }
+
+// ── AUDIT LOG ──
+function addAuditRow(action,sku,label,cls) {
+  const now=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'})
+  const row=document.createElement('div'); row.className='audit-row'
+  row.innerHTML=`<div class="audit-time">Today ${now}</div><div class="audit-action">${action}</div><div class="audit-sku">${sku}</div><div><span class="audit-status ${cls}">${label}</span></div>`
+  document.getElementById('auditRows').prepend(row)
+}
+
+// ── TOAST ──
+let toastTimer=null
+function showToast(msg,type='success') {
+  const t=document.getElementById('toast'); t.className=`toast ${type}`
+  document.getElementById('toastMsg').textContent=msg
+  document.getElementById('toastIcon').textContent=type==='success'?'✓':'✗'
+  t.style.display='flex'; clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.style.display='none',3000)
+}
+
+// ── MISC ──
+function toggleSetting(btn) { btn.classList.toggle('on'); btn.classList.toggle('off'); showToast('Setting updated','success') }
+function refreshTable() { showToast('Inventory refreshed','success') }
+function showSkuAlert() { openSkuModal('lensedrop001') }
+function filterSkus(v) { document.querySelectorAll('#inventoryRows .sku-row').forEach(r=>{ r.style.display=r.textContent.toLowerCase().includes(v.toLowerCase())?'grid':'none' }) }
+</script>
+</body>
+</html>
