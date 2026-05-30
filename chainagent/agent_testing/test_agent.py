@@ -1,8 +1,12 @@
-# test_agent.py  (place in your project root)
 import os
+import sys
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Absolute path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 # ── minimal emit so we can see the trace ──────────────────────────────────────
 def emit(tag, msg):
@@ -12,7 +16,7 @@ def emit(tag, msg):
 def test_env():
     key = os.getenv("GEMINI_API_KEY")
     assert key, "GEMINI_API_KEY is missing from .env"
-    print(f"[ENV] Key found: {key[:8]}...")  # prints first 8 chars only
+    print(f"[ENV] Key found: {key[:8]}...")
 
 # ── 2. test: gemini client connects ──────────────────────────────────────────
 def test_client():
@@ -45,11 +49,33 @@ def test_data():
         assert "reorder_qty" in sku
     emit("DATA", f"{len(skus)} SKUs loaded and validated")
 
-# ── 5. test: full agent run (mocks voice + snowflake) ────────────────────────
+# ── 5. test: elevenlabs voice ─────────────────────────────────────────────────
+def test_voice():
+    from elevenlabs.client import ElevenLabs
+    from elevenlabs import stream
+
+    api_key = os.getenv("ELEVENLABS_API_KEY")
+    voice_id = os.getenv("ELEVENLABS_VOICE_ID")
+
+    assert api_key, "ELEVENLABS_API_KEY is missing from .env"
+    assert voice_id, "ELEVENLABS_VOICE_ID is missing from .env"
+
+    client = ElevenLabs(api_key=api_key)
+
+    audio_stream = client.text_to_speech.stream(
+        voice_id=voice_id,
+        text="Alert: critical stock level detected for Widget A. Reorder immediately.",
+        model_id="eleven_flash_v2_5"
+    )
+
+    emit("VOICE", "Playing audio live...")
+    stream(audio_stream)
+    emit("VOICE", "Playback complete")
+
+# ── 6. test: full agent run (mocks voice + snowflake) ────────────────────────
 def test_agent():
     import agent.chain_agent as agent_module
 
-    # stub out the two functions that need external credentials
     agent_module.trigger_voice = lambda sku, days: emit("VOICE", f"[stubbed] alert for {sku['name']}")
     agent_module.log_snowflake = lambda sku, reasoning, email: emit("SNOWFLAKE", "[stubbed] log call")
 
@@ -58,7 +84,7 @@ def test_agent():
 
 # ── run all ───────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    tests = [test_env, test_client, test_generate, test_data, test_agent]
+    tests = [test_env, test_client, test_generate, test_data, test_voice, test_agent]
     for test in tests:
         print(f"\n{'─'*50}")
         print(f"Running: {test.__name__}")
