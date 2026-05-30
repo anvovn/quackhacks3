@@ -1,4 +1,3 @@
-cat > ~/Desktop/quackhacks3 / chainagent / app / page.tsx << 'EOF'
 export default function Home() {
   return (
     <html>
@@ -8,6 +7,3 @@ export default function Home() {
     </html>
   )
 }
-EOF
-
-
