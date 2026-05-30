@@ -1,6 +1,13 @@
-import { redirect } from 'next/navigation'
-
+cat > ~/Desktop/quackhacks3 / chainagent / app / page.tsx << 'EOF'
 export default function Home() {
-  redirect('/dashboard')
+  return (
+    <html>
+      <head>
+        <meta httpEquiv="refresh" content="0; url=/index.html" />
+      </head>
+    </html>
+  )
 }
+EOF
+
 
