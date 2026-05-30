@@ -1,13 +1,21 @@
 import json
 import os
 from pathlib import Path
-
 from google import genai
 from dotenv import load_dotenv
+from elevenlabs.client import ElevenLabs
+import snowflake.connector
 
 load_dotenv()
+print("VOICE ID:", os.getenv("ELEVENLABS_VOICE_ID"))
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
+ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID")
+SNOWFLAKE_USER = os.getenv("SNOWFLAKE_USER")
+SNOWFLAKE_PASSWORD = os.getenv("SNOWFLAKE_PASSWORD")
+SNOWFLAKE_ACCOUNT = os.getenv("SNOWFLAKE_ACCOUNT")
+
 DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "skus.json"
 
 
@@ -24,6 +32,35 @@ def generate_text(client, prompt):
         contents=prompt,
     )
     return response.text or ""
+
+
+def trigger_voice(sku, days):
+    client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+    audio = client.text_to_speech.convert(
+        voice_id=ELEVENLABS_VOICE_ID,
+        text=f"Alert: {sku['name']} has only {days:.1f} days of stock left. Reorder immediately.",
+        model_id="eleven_flash_v2_5",
+    )
+    output_path = Path(__file__).resolve().parent / "voice_alert.mp3"
+    with open(output_path, "wb") as f:
+        for chunk in audio:
+            f.write(chunk)
+
+
+def log_snowflake(sku, reasoning, email):
+    conn = snowflake.connector.connect(
+        user=SNOWFLAKE_USER,
+        password=SNOWFLAKE_PASSWORD,
+        account=SNOWFLAKE_ACCOUNT,
+    )
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO chainagent.logs.agent_runs (sku_name, reasoning, email) VALUES (%s, %s, %s)",
+        (sku["name"], reasoning, email)
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
 
 
 def run_agent(emit):
