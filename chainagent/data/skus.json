@@ -1,0 +1,26 @@
+[
+  {
+    "name": "Widget A",
+    "stock": 120,
+    "velocity_per_day": 20,
+    "lead_time_days": 10,
+    "supplier_name": "Acme Supplies",
+    "reorder_qty": 500
+  },
+  {
+    "name": "Gadget B",
+    "stock": 30,
+    "velocity_per_day": 15,
+    "lead_time_days": 5,
+    "supplier_name": "Beta Corp",
+    "reorder_qty": 300
+  },
+  {
+    "name": "Part C",
+    "stock": 10,
+    "velocity_per_day": 8,
+    "lead_time_days": 7,
+    "supplier_name": "Gamma Ltd",
+    "reorder_qty": 200
+  }
+]
