@@ -35,16 +35,14 @@ def generate_text(client, prompt):
 
 
 def trigger_voice(sku, days):
+    from elevenlabs import stream
     client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
-    audio = client.text_to_speech.convert(
+    audio_stream = client.text_to_speech.stream(
         voice_id=ELEVENLABS_VOICE_ID,
         text=f"Alert: {sku['name']} has only {days:.1f} days of stock left. Reorder immediately.",
         model_id="eleven_flash_v2_5",
     )
-    output_path = Path(__file__).resolve().parent / "voice_alert.mp3"
-    with open(output_path, "wb") as f:
-        for chunk in audio:
-            f.write(chunk)
+    stream(audio_stream)
 
 
 def log_snowflake(sku, reasoning, email):
