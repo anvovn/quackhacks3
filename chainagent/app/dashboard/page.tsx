@@ -651,6 +651,8 @@ function AgentInquiriesPanel() {
 }
 
 function OrderHistorySection({orders, auditRows, inbounds, onUpdateOrder}:{orders:PurchaseOrder[], auditRows:AuditRow[], inbounds:StockInbound[], onUpdateOrder:(ref:string, status:PurchaseOrder["status"])=>void}) {
+  const [activeTab, setActiveTab] = useState<"orders"|"inquiries">("orders")
+
   const pillType = (s:PurchaseOrder["status"]):React.ComponentProps<typeof StatusPill>["type"] =>
     s==="received"?"live":s==="in-transit"?"transit":s==="confirmed"?"pending":"draft"
 
@@ -680,7 +682,6 @@ function OrderHistorySection({orders, auditRows, inbounds, onUpdateOrder}:{order
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
             {activeTab==="orders" && <>
               <Btn onClick={exportCSV}>↓ Export CSV</Btn>
-              <Btn onClick={onClear} style={{color:"var(--muted)"}}>✕ Clear History</Btn>
             </>}
             <div style={{display:"flex",gap:4}}>
               <button style={tabBtnStyle(activeTab==="orders")}    onClick={()=>setActiveTab("orders")}>Orders</button>
