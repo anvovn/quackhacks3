@@ -15,7 +15,6 @@ load_dotenv()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
-LOCAL_SKUS_PATH   = DATA_DIR / "skus.json"
 SUPPLEMENT_PATH   = DATA_DIR / "sku-supplement.json"
 SHOPIFY_CFG_PATH  = DATA_DIR / "shopify-config.json"
 
@@ -96,16 +95,12 @@ def _fetch_shopify_skus(store: str, token: str) -> list[dict]:
 
 def load_skus(emit=None) -> list[dict]:
     cfg = _shopify_config()
-    if cfg:
-        try:
-            skus = _fetch_shopify_skus(cfg["store"], cfg["token"])
-            if emit:
-                emit("STATUS", f"Loaded {len(skus)} SKUs from Shopify")
-            return skus
-        except Exception as exc:
-            if emit:
-                emit("STATUS", f"Shopify fetch failed ({exc}), falling back to local data")
-    return json.loads(LOCAL_SKUS_PATH.read_text())
+    if not cfg:
+        raise RuntimeError("No Shopify store configured. Connect your store in Settings.")
+    skus = _fetch_shopify_skus(cfg["store"], cfg["token"])
+    if emit:
+        emit("STATUS", f"Loaded {len(skus)} SKUs from Shopify")
+    return skus
 
 
 def _get_primary_location(store: str, token: str) -> int:
