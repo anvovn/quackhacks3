@@ -83,6 +83,7 @@ def _fetch_shopify_skus(store: str, token: str) -> list[dict]:
             )
             skus.append({
                 "id": variant["sku"] or f"shopify-{variant['id']}",
+                "variant_id": variant["id"],
                 "name": f"{product['title']}{label}",
                 "stock": variant["inventory_quantity"],
                 "velocity_per_day": supp["velocity_per_day"],
@@ -105,6 +106,52 @@ def load_skus(emit=None) -> list[dict]:
             if emit:
                 emit("STATUS", f"Shopify fetch failed ({exc}), falling back to local data")
     return json.loads(LOCAL_SKUS_PATH.read_text())
+
+
+def _get_primary_location(store: str, token: str) -> int:
+    url = f"https://{store}/admin/api/2024-01/locations.json"
+    req = urllib.request.Request(url, headers={"X-Shopify-Access-Token": token})
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        locations = json.loads(resp.read())["locations"]
+    return locations[0]["id"]
+
+
+def create_shopify_transfer(sku: dict, emit) -> None:
+    cfg = _shopify_config()
+    if not cfg:
+        emit("STATUS", "No Shopify config — skipping transfer")
+        return
+
+    variant_id = sku.get("variant_id")
+    if not variant_id:
+        emit("STATUS", f"No variant_id for {sku['name']} — skipping transfer")
+        return
+
+    store, token = cfg["store"], cfg["token"]
+    try:
+        location_id = _get_primary_location(store, token)
+        payload = json.dumps({
+            "transfer": {
+                "reference_number": f"REORDER-{sku['id']}",
+                "to_location_id": location_id,
+                "line_items": [{"variant_id": variant_id, "quantity": sku["reorder_qty"]}],
+            }
+        }).encode()
+
+        url = f"https://{store}/admin/api/2024-01/transfers.json"
+        req = urllib.request.Request(
+            url,
+            data=payload,
+            headers={"X-Shopify-Access-Token": token, "Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            result = json.loads(resp.read())
+
+        transfer_id = result["transfer"]["id"]
+        emit("ACT", f"Shopify transfer #{transfer_id} created — {sku['reorder_qty']} units of {sku['name']} pending receipt")
+    except Exception as exc:
+        emit("ERROR", f"Failed to create Shopify transfer for {sku['name']}: {exc}")
 
 
 def get_gemini_client():
@@ -151,5 +198,6 @@ def run_agent(emit):
                 f"Draft urgent reorder email for {sku['name']} to {sku['supplier_name']}. Qty: {sku['reorder_qty']} units. Keep it professional and brief. Use plain text only, no markdown."
             ))
             emit("EMAIL", email)
+            create_shopify_transfer(sku, emit)
             trigger_voice(sku, days)
             log_snowflake(sku, reasoning, email, days)
