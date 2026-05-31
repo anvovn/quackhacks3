@@ -1633,17 +1633,9 @@ export default function Dashboard() {
               <span style={{display:"inline-block", animation: syncPhase==="syncing" ? "spin 0.7s linear infinite" : "none"}}>↻</span>
               Resync
             </button>
-            {agentSettings.autoResyncEnabled && (
-              <div onClick={()=>setSection("settings")} style={{...S.mono,fontSize:10,color:"var(--muted)",padding:"4px 10px",borderRadius:100,background:"var(--surface2)",border:"1px solid var(--border)",cursor:"pointer"}} title="Go to Settings">
-                Auto-resync · {agentSettings.autoResyncSecs}s
-              </div>
-            )}
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8,background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:8,padding:"6px 12px",...S.mono,fontSize:11,color:"var(--text)"}}>
             🏷 {brand?.label ?? "portland-optics-65ovalib"}
-          </div>
-          <div style={{...S.mono,fontSize:10,color:"var(--muted)",background:"var(--surface2)",padding:"4px 10px",borderRadius:100,border:"1px solid var(--border)",cursor:"pointer"}} onClick={()=>setSection("settings")}>
-            Next run: {fmt(scheduleSecs)}
           </div>
           <button onClick={toggleSim} style={{...S.mono,fontSize:10,padding:"5px 12px",borderRadius:100,cursor:"pointer",
             border:simRunning?"1px solid rgba(245,158,11,0.4)":"1px solid var(--border)",
