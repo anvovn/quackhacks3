@@ -6,13 +6,12 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from agent.config import get_key
+
 load_dotenv()
 
-SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
-EMAIL_FROM       = os.getenv("EMAIL_FROM")  # e.g. "alerts@yourdomain.com"
-
-DATA_DIR      = Path(__file__).resolve().parents[1] / "data"
-EMAIL_CONFIG  = DATA_DIR / "email-config.json"
+DATA_DIR     = Path(__file__).resolve().parents[1] / "data"
+EMAIL_CONFIG = DATA_DIR / "email-config.json"
 
 
 def _load_config() -> dict:
@@ -31,7 +30,9 @@ def trigger_email(sku: dict, days: float) -> None:
     if not to_email:
         return
 
-    if not SENDGRID_API_KEY or not EMAIL_FROM:
+    api_key    = get_key("sendgrid_api_key", "SENDGRID_API_KEY")
+    email_from = get_key("email_from", "EMAIL_FROM")
+    if not api_key or not email_from:
         raise RuntimeError("SendGrid credentials not set (SENDGRID_API_KEY, EMAIL_FROM)")
 
     _send(
@@ -39,17 +40,19 @@ def trigger_email(sku: dict, days: float) -> None:
         subject=f"[ChainAgent] Action Required — {sku['name']} stockout in {days:.1f} days",
         body=(
             f"ChainAgent Alert\n\n"
-            f"{sku['name']} has only {days:.1f} days of stock left "
-            f"(lead time {sku['lead_time_days']} days). A reorder has been drafted. "
-            f"Log in to review and approve."
+            f"{sku['name']} has only {days:.1f} days of stock left. "
+            f"A reorder has been drafted. Log in to review and approve."
         ),
     )
 
 
 def _send(to_email: str, subject: str, body: str) -> None:
+    api_key    = get_key("sendgrid_api_key", "SENDGRID_API_KEY")
+    email_from = get_key("email_from", "EMAIL_FROM")
+
     payload = json.dumps({
         "personalizations": [{"to": [{"email": to_email}]}],
-        "from": {"email": EMAIL_FROM},
+        "from": {"email": email_from},
         "subject": subject,
         "content": [{"type": "text/plain", "value": body}],
     }).encode()
@@ -58,7 +61,7 @@ def _send(to_email: str, subject: str, body: str) -> None:
         "https://api.sendgrid.com/v3/mail/send",
         data=payload,
         headers={
-            "Authorization": f"Bearer {SENDGRID_API_KEY}",
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         },
         method="POST",

@@ -8,10 +8,37 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-from agent.chain_agent import run_agent, adjust_shopify_inventory, load_skus
+from agent.chain_agent import run_agent, adjust_shopify_inventory, load_skus, simulate_one_day
 
 DATA_DIR     = Path(__file__).resolve().parents[1] / "data"
 EMAIL_CONFIG = DATA_DIR / "email-config.json"
+API_KEYS_FILE = DATA_DIR / "api-keys.json"
+
+# Keys exposed to the UI — maps JSON field name → env var fallback
+_KEY_DEFS = {
+    "gemini_api_key":     "GEMINI_API_KEY",
+    "gemini_model":       "GEMINI_MODEL",
+    "elevenlabs_api_key": "ELEVENLABS_API_KEY",
+    "elevenlabs_voice_id":"ELEVENLABS_VOICE_ID",
+    "snowflake_user":     "SNOWFLAKE_USER",
+    "snowflake_password": "SNOWFLAKE_PASSWORD",
+    "snowflake_account":  "SNOWFLAKE_ACCOUNT",
+    "sendgrid_api_key":   "SENDGRID_API_KEY",
+    "email_from":         "EMAIL_FROM",
+    "twilio_account_sid": "TWILIO_ACCOUNT_SID",
+    "twilio_auth_token":  "TWILIO_AUTH_TOKEN",
+    "twilio_from":        "TWILIO_FROM",
+}
+
+def _read_api_keys() -> dict:
+    try:
+        return json.loads(API_KEYS_FILE.read_text())
+    except Exception:
+        return {}
+
+def _write_api_keys(keys: dict) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    API_KEYS_FILE.write_text(json.dumps(keys, indent=2))
 
 
 def _read_email_config() -> dict:
@@ -219,3 +246,42 @@ def get_snowflake_logs():
         return {"rows": rows}
     except Exception as exc:
         return {"rows": [], "error": str(exc)}
+
+
+@app.post("/simulate-day")
+def simulate_day():
+    """Deduct one day of velocity from all SKUs in Shopify."""
+    try:
+        changes = simulate_one_day()
+        return {"status": "ok", "changes": changes}
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
+
+
+import os as _os
+
+@app.get("/api-keys")
+def get_api_keys_status():
+    """Return which keys are configured — booleans only, never raw values."""
+    saved = _read_api_keys()
+    result = {}
+    for field, env_var in _KEY_DEFS.items():
+        val = saved.get(field) or _os.getenv(env_var, "")
+        result[field] = bool(val)
+    return result
+
+
+@app.post("/api-keys")
+def save_api_keys(body: dict = Body(default={})):
+    """Persist provided keys to data/api-keys.json. Empty string clears a key."""
+    saved = _read_api_keys()
+    for field in _KEY_DEFS:
+        if field not in body:
+            continue
+        val = body[field].strip() if isinstance(body[field], str) else ""
+        if val:
+            saved[field] = val
+        elif field in saved:
+            del saved[field]
+    _write_api_keys(saved)
+    return {"status": "saved"}

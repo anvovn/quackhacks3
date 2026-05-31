@@ -210,7 +210,7 @@ function OverviewSection({brand,orders,onRunAgent,onViewAllReorders}:{brand:Bran
         ))}
       </div>
       <Panel>
-        <PanelHeader title={<>📊 Live SKU Risk Monitor <BeHook>← /api/inventory</BeHook></>} actions={<Btn variant="primary" onClick={onRunAgent}>▶ Run Agent</Btn>}/>
+        <PanelHeader title="📊 Live SKU Risk Monitor" actions={<Btn variant="primary" onClick={onRunAgent}>▶ Run Agent</Btn>}/>
         <RowHead cols="2fr 70px 85px 75px 120px 95px 105px"><Th>Product</Th><Th>Stock</Th><Th>Incoming</Th><Th>Velocity</Th><Th>Runway</Th><Th>Risk</Th><Th>Agent</Th></RowHead>
         {brand.skus.map(sku=><SkuRow key={sku.id} sku={sku} cols="2fr 70px 85px 75px 120px 95px 105px" isOverview/>)}
       </Panel>
@@ -742,11 +742,6 @@ function OrderHistorySection({orders: initOrders, auditRows, pendingReorders, on
 }
 
 function NotificationsSection() {
-  const staticChannels = [
-    {icon:"💬",bg:"#4A154B",name:"Slack",sub:"Connected · #chainagent-alerts",on:true,preview:"🚨 ChainAgent: Portland Aviator Pro 8.9 days stock. Lead 21 days. Reorder drafted 800 units. Approve →"},
-    {icon:"🔊",bg:"var(--accent-dim)",name:"Voice Alert",sub:"ElevenLabs · Rachel",on:true,preview:"\"Portland Aviator Pro has 8 days of stock. Lead time is 21 days. I've drafted a reorder for 800 units. Awaiting your approval.\""},
-  ]
-  const [states, setStates] = useState(staticChannels.map(c=>c.on))
 
   // Email state — persisted via backend
   const [emailEnabled, setEmailEnabled] = useState(false)
@@ -801,17 +796,6 @@ function NotificationsSection() {
       <Panel>
         <PanelHeader title="🔔 Notification Channels"/>
         <div style={{padding:16,display:"flex",flexDirection:"column",gap:10}}>
-          {staticChannels.map((c,i)=>(
-            <div key={i} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:10,padding:"12px 14px"}}>
-              <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:8}}>
-                <div style={{width:28,height:28,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,background:c.bg,flexShrink:0}}>{c.icon}</div>
-                <div style={{flex:1}}><div style={{fontSize:12,fontWeight:500,color:"var(--text)"}}>{c.name}</div><div style={{...S.mono,fontSize:10,color:"var(--muted)"}}>{c.sub}</div></div>
-                <Toggle on={states[i]} onChange={v=>setStates(s=>{const n=[...s];n[i]=v;return n})}/>
-              </div>
-              <div style={{fontSize:11,color:"var(--muted2)",lineHeight:1.6,borderTop:"1px solid var(--border)",paddingTop:8}}><strong>Preview:</strong> {c.preview}</div>
-            </div>
-          ))}
-
           {/* Email — live SendGrid integration */}
           <div style={{background:"var(--surface2)",border:`1px solid ${emailEnabled?"rgba(37,211,102,0.25)":"var(--border)"}`,borderRadius:10,padding:"12px 14px"}}>
             <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:8}}>
@@ -839,9 +823,6 @@ function NotificationsSection() {
                 {emailSaving?"Saving…":emailSaved?"Saved ✓":"Save"}
               </Btn>
             </div>
-            <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginTop:6}}>
-              Set SENDGRID_API_KEY and EMAIL_FROM in .env
-            </div>
           </div>
 
           <div style={{display:"flex",flexDirection:"column",gap:4}}>
@@ -852,6 +833,113 @@ function NotificationsSection() {
           </div>
         </div>
       </Panel>
+    </>
+  )
+}
+
+// ── API KEYS PANEL ──
+const API_SERVICES = [
+  { id:"gemini",     label:"Gemini",     fields:[
+    {key:"gemini_api_key",    label:"API Key",   secret:true,  placeholder:"AIza..."},
+    {key:"gemini_model",      label:"Model",     secret:false, placeholder:"gemini-2.5-flash"},
+  ]},
+  { id:"elevenlabs", label:"ElevenLabs", fields:[
+    {key:"elevenlabs_api_key",  label:"API Key",  secret:true,  placeholder:"sk_..."},
+    {key:"elevenlabs_voice_id", label:"Voice ID", secret:false, placeholder:"21m00Tcm4TlvDq8ikWAM"},
+  ]},
+  { id:"snowflake",  label:"Snowflake",  fields:[
+    {key:"snowflake_user",     label:"User",     secret:false, placeholder:"MY_USER"},
+    {key:"snowflake_password", label:"Password", secret:true,  placeholder:"••••••••"},
+    {key:"snowflake_account",  label:"Account",  secret:false, placeholder:"abc12345.us-east-1"},
+  ]},
+  { id:"sendgrid",   label:"SendGrid",   fields:[
+    {key:"sendgrid_api_key", label:"API Key",     secret:true,  placeholder:"SG...."},
+    {key:"email_from",       label:"From Email",  secret:false, placeholder:"alerts@yourdomain.com"},
+  ]},
+] as const
+
+type KeyField = typeof API_SERVICES[number]["fields"][number]
+
+function ApiKeysPanel() {
+  const [status, setStatus]   = useState<Record<string,boolean>>({})
+  const [open, setOpen]       = useState<string|null>(null)
+  const [drafts, setDrafts]   = useState<Record<string,string>>({})
+  const [saving, setSaving]   = useState(false)
+  const [saved,  setSavedKey] = useState<string|null>(null)
+
+  useEffect(()=>{
+    fetch("/api/api-keys").then(r=>r.json()).then(setStatus).catch(()=>{})
+  },[])
+
+  function isConnected(svc: typeof API_SERVICES[number]) {
+    return svc.fields.every(f => status[f.key])
+  }
+
+  async function handleSave(svc: typeof API_SERVICES[number]) {
+    setSaving(true)
+    const body: Record<string,string> = {}
+    svc.fields.forEach(f => { if(drafts[f.key]!=null) body[f.key] = drafts[f.key] })
+    await fetch("/api/api-keys", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) })
+    const fresh = await fetch("/api/api-keys").then(r=>r.json())
+    setStatus(fresh)
+    setSaving(false)
+    setSavedKey(svc.id)
+    setTimeout(()=>setSavedKey(null), 2000)
+    setOpen(null)
+  }
+
+  const inp = {
+    ...S.mono, fontSize:11, background:"var(--surface)", border:"1px solid var(--border2)",
+    borderRadius:6, padding:"7px 10px", color:"var(--text)", outline:"none", width:"100%",
+  } as React.CSSProperties
+
+  return (
+    <>
+      {API_SERVICES.map(svc=>{
+        const connected = isConnected(svc)
+        const isOpen    = open === svc.id
+        return (
+          <div key={svc.id} style={{background:"var(--surface2)",borderRadius:10,border:`1px solid ${connected?"rgba(0,229,160,0.2)":"var(--border)"}`,overflow:"hidden"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 13px"}}>
+              <div>
+                <div style={{fontSize:13,color:"var(--text)"}}>{svc.label}</div>
+                <div style={{...S.mono,fontSize:10,marginTop:1,color:connected?"var(--accent)":"var(--muted)"}}>
+                  {connected ? "● Connected" : "◌ Not configured"}
+                </div>
+              </div>
+              <Btn variant={connected?"ghost":"primary"} style={{fontSize:10,padding:"5px 12px"}}
+                onClick={()=>setOpen(isOpen?null:svc.id)}>
+                {saved===svc.id ? "Saved ✓" : connected ? "Update Keys" : "Configure"}
+              </Btn>
+            </div>
+            {isOpen&&(
+              <div style={{borderTop:"1px solid var(--border)",padding:"14px 13px",display:"flex",flexDirection:"column",gap:10}}>
+                <div style={{display:"grid",gridTemplateColumns:`repeat(${Math.min(svc.fields.length,2)},1fr)`,gap:9}}>
+                  {svc.fields.map((f: KeyField)=>(
+                    <div key={f.key}>
+                      <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginBottom:4}}>
+                        {f.label}{status[f.key]&&<span style={{color:"var(--accent)",marginLeft:6}}>● set</span>}
+                      </div>
+                      <input
+                        type={f.secret?"password":"text"}
+                        placeholder={status[f.key]?"••••••••":f.placeholder}
+                        value={drafts[f.key]??""}
+                        onChange={e=>setDrafts(d=>({...d,[f.key]:e.target.value}))}
+                        style={inp}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                  <Btn variant="primary" style={{fontSize:11,padding:"7px 16px"}} onClick={()=>handleSave(svc)} disabled={saving}>
+                    {saving?"Saving…":"Save"}
+                  </Btn>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })}
     </>
   )
 }
@@ -939,8 +1027,8 @@ function SettingsSection({agentSettings, onSaveSettings}:{agentSettings:AgentSet
           ] as {key:keyof AgentSettings, label:string, sub:string}[]).map(({key,label,sub})=>(
             <div key={key} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 13px",background:"var(--surface2)",borderRadius:10,border:"1px solid var(--border)"}}>
               <div><div style={{fontSize:13,color:"var(--text)"}}>{label}</div><div style={{...S.mono,fontSize:10,color:"var(--muted)",marginTop:1}}>{sub}</div></div>
-              <input value={draft[key] as number} type="number" min={1}
-                onChange={e=>setDraft(d=>({...d,[key]:Math.max(1,parseInt(e.target.value)||1)}))}
+              <input value={draft[key] as number} type="number" min={0.1} step={0.1}
+                onChange={e=>setDraft(d=>({...d,[key]:Math.max(0.1,parseFloat(e.target.value)||0.1)}))}
                 style={{...S.mono,background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:6,padding:"5px 9px",color:"var(--text)",fontSize:11,outline:"none",width:70}}/>
             </div>
           ))}
@@ -950,7 +1038,7 @@ function SettingsSection({agentSettings, onSaveSettings}:{agentSettings:AgentSet
         </div>
       </Panel>
       <Panel>
-        <PanelHeader title={<>🔌 API Connections <BeHook>← .env.local</BeHook></>}/>
+        <PanelHeader title="🔌 API Connections"/>
         <div style={{padding:16,display:"flex",flexDirection:"column",gap:8}}>
 
           {/* ── Shopify — live connection ── */}
@@ -990,25 +1078,14 @@ function SettingsSection({agentSettings, onSaveSettings}:{agentSettings:AgentSet
                     {shopifyPhase==="saving"?"Testing…":shopifyPhase==="ok"?"✓ Connected":shopifyPhase==="err"?"Retry":"Test & Save"}
                   </Btn>
                   <div style={{...S.mono,fontSize:10,color:"var(--muted)"}}>
-                    Needs <code style={{background:"var(--surface3)",padding:"1px 5px",borderRadius:3}}>read_products</code> + <code style={{background:"var(--surface3)",padding:"1px 5px",borderRadius:3}}>read_inventory</code> scopes
                   </div>
                 </div>
               </div>
             )}
           </div>
 
-          {/* ── Other static integrations ── */}
-          {[
-            {name:"Claude API",  sub:"● Connected",                subColor:"var(--accent)", action:"Update Key"},
-            {name:"ElevenLabs",  sub:"● Connected",                subColor:"var(--accent)", action:"Update Key"},
-            {name:"Snowflake",   sub:"◎ Pending setup",            subColor:"var(--amber)",  action:"Connect", primary:true},
-            {name:"Gemini Vision",sub:"● Connected · PDF parsing", subColor:"var(--accent)", action:"Update Key"},
-          ].map(({name,sub,subColor,action,primary})=>(
-            <div key={name} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 13px",background:"var(--surface2)",borderRadius:10,border:"1px solid var(--border)"}}>
-              <div><div style={{fontSize:13,color:"var(--text)"}}>{name}</div><div style={{...S.mono,fontSize:10,color:subColor,marginTop:1}}>{sub}</div></div>
-              <Btn variant={primary?"primary":"ghost"} style={{fontSize:10,padding:"5px 12px"}}>{action}</Btn>
-            </div>
-          ))}
+          {/* ── API key integrations ── */}
+          <ApiKeysPanel/>
         </div>
       </Panel>
     </>
@@ -1058,14 +1135,18 @@ function AgentSection({brand,supplierEmail,supplierName,reorderQty,agentRunning,
             <div key={i} className="trace-line" style={{display:"flex",gap:9,alignItems:"flex-start",...S.mono,fontSize:11,lineHeight:1.7}}>
               <span style={{color:"var(--muted)",flexShrink:0,fontSize:10,paddingTop:1}}>{l.time}</span>
               <span style={{fontSize:9,fontWeight:500,padding:"2px 6px",borderRadius:3,flexShrink:0,minWidth:48,textAlign:"center" as const,marginTop:2,...tagStyle(l.tag)}}>{l.tag}</span>
-              <span style={{color:"var(--text)"}}>{l.msg}</span>
+              <span style={{color:"var(--text)"}}>
+                {l.tag==="REORDER"
+                  ? (() => { try { const r=JSON.parse(l.msg); return `Reorder queued · ${r.name} · ${r.qty?.toLocaleString()} units → ${r.supplier}` } catch { return l.msg } })()
+                  : l.msg}
+              </span>
             </div>
           ))}
         </div>
       </div>
       {showEmail&&(
         <div className="email-panel" style={{background:"var(--surface)",border:"1px solid var(--border)",borderLeft:"3px solid var(--accent)",borderRadius:14,overflow:"hidden"}}>
-          <PanelHeader title={<>📧 AI-Drafted Supplier Email <BeHook>← gemini</BeHook></>}/>
+          <PanelHeader title="📧 AI-Drafted Supplier Email"/>
           <div style={{padding:"12px 18px",borderBottom:"1px solid var(--border)"}}>
             <div style={{display:"flex",gap:10,...S.mono,fontSize:12,padding:"4px 0"}}>
               <span style={{color:"var(--muted)",minWidth:55}}>To:</span>
@@ -1141,9 +1222,9 @@ export default function Dashboard() {
   const [syncPhase, setSyncPhase] = useState<"idle"|"syncing"|"done">("idle")
   const [agentSettings, setAgentSettings] = useState({
     autoApprove: false, scheduleEnabled: false,
-    scheduleIntervalMins: 30, autoSendWindowMins: 120, riskThresholdDays: 14,
+    scheduleIntervalMins: 0.5, autoSendWindowMins: 120, riskThresholdDays: 14,
   })
-  const [scheduleSecs, setScheduleSecs] = useState(30 * 60)
+  const [scheduleSecs, setScheduleSecs] = useState(30)
   const [cdSecs, setCdSecs]       = useState(120 * 60)
   const [liveSkus, setLiveSkus]   = useState<RawSKU[] | "error" | null>(null)
   const [auditRows, setAuditRows] = useState<AuditRow[]>([])
@@ -1397,6 +1478,39 @@ export default function Dashboard() {
     }, 1200)
   },[syncPhase])
 
+  // Auto-resync every 10 seconds
+  useEffect(()=>{
+    const t = setInterval(handleResync, 10_000)
+    return ()=>clearInterval(t)
+  },[handleResync])
+
+  // ── Simulation ──
+  const [simRunning, setSimRunning] = useState(false)
+  const [simDay,     setSimDay]     = useState(0)
+  const simRef = useRef<ReturnType<typeof setInterval>|null>(null)
+
+  const tickSimDay = useCallback(async ()=>{
+    await fetch("/api/simulate-day", { method:"POST" })
+    setSimDay(d => d + 1)
+    handleResync()
+  }, [handleResync])
+
+  useEffect(()=>{
+    if(simRunning){
+      tickSimDay()
+      simRef.current = setInterval(tickSimDay, 10_000)
+    } else {
+      if(simRef.current) clearInterval(simRef.current)
+    }
+    return ()=>{ if(simRef.current) clearInterval(simRef.current) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[simRunning])
+
+  function toggleSim(){
+    if(simRunning){ setSimRunning(false) }
+    else { setSimDay(0); setSimRunning(true) }
+  }
+
   const navItems = [
     {id:"overview",    name:"Overview",       icon:"◈", label:"Monitor"},
     {id:"agent",       name:"Run Agent",      icon:"⚡", label:"Monitor"},
@@ -1468,6 +1582,12 @@ export default function Dashboard() {
           <div style={{...S.mono,fontSize:10,color:"var(--muted)",background:"var(--surface2)",padding:"4px 10px",borderRadius:100,border:"1px solid var(--border)",cursor:"pointer"}} onClick={()=>setSection("settings")}>
             Next run: {fmt(scheduleSecs)}
           </div>
+          <button onClick={toggleSim} style={{...S.mono,fontSize:10,padding:"5px 12px",borderRadius:100,cursor:"pointer",
+            border:simRunning?"1px solid rgba(245,158,11,0.4)":"1px solid var(--border)",
+            background:simRunning?"rgba(245,158,11,0.12)":"var(--surface2)",
+            color:simRunning?"#f59e0b":"var(--muted)"}}>
+            {simRunning?`⏱ Sim Day ${simDay}`:"⏱ Simulate"}
+          </button>
           <div style={{display:"flex",alignItems:"center",gap:6,...S.mono,fontSize:10,padding:"5px 12px",borderRadius:100,
             border:`1px solid ${backendOnline===false?"rgba(239,68,68,0.3)":backendOnline===null?"rgba(245,158,11,0.3)":"var(--accent-mid)"}`,
             background:backendOnline===false?"var(--red-dim)":backendOnline===null?"var(--amber-dim)":"var(--accent-dim)",
@@ -1478,8 +1598,20 @@ export default function Dashboard() {
         </div>
       </nav>
 
+      {/* SIMULATION BAR */}
+      {simRunning&&(
+        <div style={{position:"fixed",top:54,left:0,right:0,zIndex:40,background:simRunning?"#78350f":"#1c1917",borderBottom:"2px solid #f59e0b",padding:"6px 20px",display:"flex",alignItems:"center",gap:12,...S.mono,fontSize:11}}>
+          <span style={{color:"#f59e0b",fontWeight:700}}>⏱ SIM</span>
+          <span style={{color:"var(--text)"}}>Day <strong>{simDay}</strong> · 30s = 1 day · inventory depleting at real velocity</span>
+          <div style={{flex:1}}/>
+          <Btn onClick={toggleSim} style={{fontSize:10,padding:"3px 12px",background:simRunning?"rgba(239,68,68,0.2)":"rgba(34,197,94,0.15)",color:simRunning?"var(--red)":"var(--accent)",border:`1px solid ${simRunning?"rgba(239,68,68,0.4)":"rgba(34,197,94,0.3)"}`}}>
+            {simRunning?"■ Stop Sim":"▶ Resume"}
+          </Btn>
+        </div>
+      )}
+
       {/* LAYOUT */}
-      <div style={{display:"grid",gridTemplateColumns:"224px 1fr",minHeight:"100vh",paddingTop:54,position:"relative",zIndex:1}}>
+      <div style={{display:"grid",gridTemplateColumns:"224px 1fr",minHeight:"100vh",paddingTop:simRunning?88:54,position:"relative",zIndex:1}}>
 
         {/* SIDEBAR */}
         <aside style={{borderRight:"1px solid var(--border)",background:"var(--surface)",padding:"18px 0",position:"sticky",top:54,height:"calc(100vh - 54px)",overflowY:"auto",display:"flex",flexDirection:"column"}}>

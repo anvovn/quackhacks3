@@ -10,16 +10,25 @@ from dotenv import load_dotenv
 from agent.elevenlabs import trigger_voice
 from agent.snowflake_log import log_snowflake
 from agent.twilio_email import trigger_email
+from agent.config import get_key
 
 load_dotenv()
-
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 SHOPIFY_CFG_PATH = DATA_DIR / "shopify-config.json"
 
 VELOCITY_DAYS = 30
 REORDER_THRESHOLD_DAYS = 14  # only analyze SKUs with less than this many days of stock
+
+SUPPLEMENT_PATH = DATA_DIR / "sku-supplement.json"
+SIM_FALLBACK_VELOCITY = 5  # units/day used when no order or supplement data exists
+
+
+def _load_supplement() -> dict:
+    try:
+        return json.loads(SUPPLEMENT_PATH.read_text())
+    except Exception:
+        return {}
 
 
 def strip_markdown(text):
@@ -149,16 +158,71 @@ def adjust_shopify_inventory(variant_id: int, qty: int) -> dict:
         return json.loads(resp.read())
 
 
+def simulate_one_day() -> list[dict]:
+    """Deduct one day of sales velocity from every SKU in Shopify."""
+    cfg = _shopify_config()
+    if not cfg:
+        raise RuntimeError("No Shopify config")
+
+    store, token = cfg["store"], cfg["token"]
+    supplement = _load_supplement()
+
+    url = f"https://{store}/admin/api/2024-01/products.json?fields=id,title,variants&limit=250"
+    req = urllib.request.Request(url, headers={"X-Shopify-Access-Token": token})
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        products = json.loads(resp.read())["products"]
+
+    # Use live order velocity where available, fall back to supplement, then SIM_FALLBACK_VELOCITY
+    try:
+        live_velocity = _fetch_velocity(store, token)
+    except Exception:
+        live_velocity = {}
+
+    changes = []
+    for product in products:
+        for variant in product["variants"]:
+            sku_id = variant["sku"] or f"shopify-{variant['id']}"
+            supp = supplement.get(variant.get("sku", "")) or supplement.get(product["title"]) or {}
+            vel = (
+                live_velocity.get(variant.get("sku", ""))
+                or supp.get("velocity_per_day")
+                or SIM_FALLBACK_VELOCITY
+            )
+            deduct = max(1, round(vel))
+            stock = variant["inventory_quantity"]
+            if stock <= 0:
+                continue
+            actual = min(deduct, stock)
+            try:
+                adjust_shopify_inventory(variant["id"], -actual)
+                label = (
+                    f" {variant['title']}"
+                    if len(product["variants"]) > 1 and variant["title"] != "Default Title"
+                    else ""
+                )
+                changes.append({
+                    "name": f"{product['title']}{label}",
+                    "id": sku_id,
+                    "deducted": actual,
+                    "remaining": stock - actual,
+                })
+            except Exception:
+                pass
+
+    return changes
+
+
 def get_gemini_client():
-    api_key = os.getenv("GEMINI_API_KEY")
+    api_key = get_key("gemini_api_key", "GEMINI_API_KEY")
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY is not set")
     return genai.Client(api_key=api_key)
 
 
 def generate_text(client, prompt):
+    model = get_key("gemini_model", "GEMINI_MODEL") or "gemini-2.5-flash"
     response = client.models.generate_content(
-        model=GEMINI_MODEL,
+        model=model,
         contents=prompt,
     )
     return response.text or ""
