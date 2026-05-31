@@ -1019,7 +1019,7 @@ export default function Dashboard() {
 
   // ── real backend hook ──
   const stream = useAgentStream()
-  const { agentRunning, showEmail, emailResult, showReply, backendOnline, pendingReorders, removeReorder } = stream
+  const { agentRunning, showEmail, emailResult, showReply, backendOnline, pendingReorders, stagedReorder, removeReorder } = stream
 
   // ── check Shopify connection status ──
   useEffect(()=>{
@@ -1093,7 +1093,7 @@ export default function Dashboard() {
   const agentSupplier = critMapped ? (suppliers.find(s => s.id === skuSupplierMap[critMapped.id]) ?? null) : null
   const agentSupplierEmail = agentSupplier?.email || ""
   const agentSupplierName  = agentSupplier?.name  || ""
-  const agentReorderQty = 0 // Gemini computes reorder qty from real velocity
+  const agentReorderQty = stagedReorder?.qty ?? 0
 
   // Sync timer
   useEffect(()=>{

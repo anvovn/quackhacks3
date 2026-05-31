@@ -31,6 +31,7 @@ export interface UseAgentStreamResult {
   emailResult: string
   showReply: boolean
   pendingReorders: PendingReorder[]
+  stagedReorder: Omit<PendingReorder,"created_at"> | null
   runAgent: (supplier?: { name: string; email: string }) => Promise<void>
   approve: () => Promise<void>
   cancel: () => Promise<void>
@@ -48,6 +49,7 @@ export function useAgentStream(): UseAgentStreamResult {
   const [emailResult, setEmailResult]   = useState("")
   const [showReply, setShowReply]       = useState(false)
   const [pendingReorders, setPendingReorders] = useState<PendingReorder[]>([])
+  const [stagedReorder, setStagedReorder] = useState<Omit<PendingReorder,"created_at"> | null>(null)
 
   const esRef        = useRef<EventSource | null>(null)
   const statusTimer  = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -106,7 +108,9 @@ export function useAgentStream(): UseAgentStreamResult {
 
         if (data.tag === "REORDER") {
           try {
-            stagedReorderRef.current = JSON.parse(data.msg)
+            const parsed = JSON.parse(data.msg)
+            stagedReorderRef.current = parsed
+            setStagedReorder(parsed)
           } catch {}
         }
 
@@ -163,6 +167,7 @@ export function useAgentStream(): UseAgentStreamResult {
       if (stagedReorderRef.current) {
         setPendingReorders(prev => [...prev, { ...stagedReorderRef.current!, created_at: Date.now() }])
         stagedReorderRef.current = null
+        setStagedReorder(null)
       }
       setEmailResult("✓ Email sent to supplier · Logged to Snowflake · Inbound auto-created")
       setAwaitingApproval(false)
@@ -198,6 +203,7 @@ export function useAgentStream(): UseAgentStreamResult {
     setShowReply(false)
     setAwaitingApproval(false)
     stagedReorderRef.current = null
+    setStagedReorder(null)
     if (replyTimer.current) clearTimeout(replyTimer.current)
   }, [closeStream])
 
@@ -219,6 +225,7 @@ export function useAgentStream(): UseAgentStreamResult {
     emailResult,
     showReply,
     pendingReorders,
+    stagedReorder,
     runAgent,
     approve,
     cancel,
