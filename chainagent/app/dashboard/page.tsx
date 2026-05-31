@@ -557,19 +557,14 @@ function SuppliersSection({suppliers, onAdd, onUpdate}:{suppliers:Supplier[], on
   )
 }
 
-function OrderHistorySection({orders: initOrders, auditRows, pendingReorders}:{orders:PurchaseOrder[], auditRows:AuditRow[], pendingReorders:PendingReorder[]}) {
-  const [orders, setOrders] = useState(initOrders)
-  useEffect(()=>setOrders(initOrders),[initOrders])
+const PO_STATUSES: PurchaseOrder["status"][] = ["sent","confirmed","in-transit","received"]
+const PO_STATUS_LABEL: Record<PurchaseOrder["status"],string> = {
+  "sent":"Sent","confirmed":"Confirmed","in-transit":"In Transit","received":"Received"
+}
 
-  const nextStatus:{[k in PurchaseOrder["status"]]:PurchaseOrder["status"]} = {
-    "sent":"confirmed","confirmed":"in-transit","in-transit":"received","received":"received"
-  }
-  const nextLabel = (s:PurchaseOrder["status"]) =>
-    s==="sent"?"Mark Confirmed":s==="confirmed"?"Mark In Transit":s==="in-transit"?"Mark Received":""
+function OrderHistorySection({orders, auditRows, pendingReorders, onUpdateOrder}:{orders:PurchaseOrder[], auditRows:AuditRow[], pendingReorders:PendingReorder[], onUpdateOrder:(ref:string, status:PurchaseOrder["status"])=>void}) {
   const pillType = (s:PurchaseOrder["status"]):React.ComponentProps<typeof StatusPill>["type"] =>
     s==="received"?"live":s==="in-transit"?"transit":s==="confirmed"?"pending":"draft"
-  const pillLabel = (s:PurchaseOrder["status"]) =>
-    s==="received"?"Received":s==="in-transit"?"In Transit":s==="confirmed"?"Confirmed":"Sent"
 
   function exportCSV() {
     const header = "Time,Event,SKU,Detail,Status\n"
@@ -595,7 +590,7 @@ function OrderHistorySection({orders: initOrders, auditRows, pendingReorders}:{o
           </div>
         ):<>
           <RowHead cols="110px 1fr 1fr 60px 110px 110px 120px">
-            <Th>PO Ref</Th><Th>SKU</Th><Th>Supplier</Th><Th>Qty</Th><Th>Date</Th><Th>Status</Th><Th>Action</Th>
+            <Th>PO Ref</Th><Th>SKU</Th><Th>Supplier</Th><Th>Qty</Th><Th>Date</Th><Th>Status</Th><Th>Update</Th>
           </RowHead>
           {orders.map((po,i)=>(
             <div key={po.ref} style={{display:"grid",gridTemplateColumns:"110px 1fr 1fr 60px 110px 110px 120px",gap:10,padding:"12px 18px",borderBottom:i<orders.length-1?"1px solid var(--border)":"none",alignItems:"center",background:po.status==="received"?"rgba(0,229,160,0.02)":"transparent"}}>
@@ -604,10 +599,14 @@ function OrderHistorySection({orders: initOrders, auditRows, pendingReorders}:{o
               <div><div style={{fontSize:12,color:"var(--text)"}}>{po.supplier}</div>{po.supplierEmail&&<div style={{...S.mono,fontSize:9,color:"var(--muted)"}}>{po.supplierEmail}</div>}</div>
               <div style={{...S.mono,fontSize:12}}>{(po.qty??0).toLocaleString()}</div>
               <div style={{...S.mono,fontSize:11,color:"var(--muted)"}}>{po.orderDate}</div>
-              <StatusPill label={pillLabel(po.status)} type={pillType(po.status)}/>
-              {po.status!=="received"
-                ?<Btn style={{fontSize:10,padding:"4px 10px"}} onClick={()=>setOrders(prev=>prev.map(p=>p.ref===po.ref?{...p,status:nextStatus[p.status]}:p))}>{nextLabel(po.status)}</Btn>
-                :<div style={{...S.mono,fontSize:10,color:"var(--accent)"}}>✓ Complete</div>}
+              <StatusPill label={PO_STATUS_LABEL[po.status]} type={pillType(po.status)}/>
+              <select
+                value={po.status}
+                onChange={e=>onUpdateOrder(po.ref, e.target.value as PurchaseOrder["status"])}
+                style={{...S.mono,fontSize:10,background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:6,padding:"4px 8px",color:"var(--text)",outline:"none",cursor:"pointer",width:"100%"}}
+              >
+                {PO_STATUSES.map(s=><option key={s} value={s}>{PO_STATUS_LABEL[s]}</option>)}
+              </select>
             </div>
           ))}
         </>}
@@ -1460,7 +1459,7 @@ export default function Dashboard() {
             )
           )}
           {section==="suppliers" && (shopifyConnected===null?null:shopifyConnected===false?<ShopifyGate onSettings={()=>setSection("settings")}/>:<SuppliersSection suppliers={suppliers} onAdd={s=>setSuppliers(prev=>[...prev,s])} onUpdate={s=>setSuppliers(prev=>prev.map(p=>p.id===s.id?s:p))}/>)}
-          {section==="history"   && <OrderHistorySection orders={orders} auditRows={auditRows} pendingReorders={pendingReorders}/>}
+          {section==="history"   && <OrderHistorySection orders={orders} auditRows={auditRows} pendingReorders={pendingReorders} onUpdateOrder={(ref,status)=>setOrders(prev=>prev.map(p=>p.ref===ref?{...p,status}:p))}/>}
           {section==="notifications"&&<NotificationsSection/>}
           {section==="settings"    &&<SettingsSection agentSettings={agentSettings} onSaveSettings={setAgentSettings}/>}
         </main>
