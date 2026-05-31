@@ -1222,11 +1222,14 @@ export default function Dashboard() {
     return ()=>clearInterval(t)
   },[])
 
-  // Schedule countdown — auto-runs agent when interval expires
+  // Schedule countdown — resets immediately when interval or enabled changes
   useEffect(()=>{
-    if(!agentSettings.scheduleEnabled) return
+    if(!agentSettings.scheduleEnabled){
+      setScheduleSecs(agentSettings.scheduleIntervalMins * 60)
+      return
+    }
     const interval = agentSettings.scheduleIntervalMins * 60
-    // save target so it survives refresh
+    setScheduleSecs(interval)
     try { localStorage.setItem(`chainagent:${userKey}:scheduleTarget`, String(Date.now() + interval * 1000)) } catch {}
     const t = setInterval(()=>{
       setScheduleSecs(s=>{
