@@ -47,9 +47,14 @@ export function useAgentStream(): UseAgentStreamResult {
       const res = await fetch("/api/status", { cache: "no-store" })
       if (!res.ok) throw new Error("not ok")
       const data: { status: string; agent_running: boolean; awaiting_approval: boolean } = await res.json()
-      setBackendOnline(true)
-      setAgentRunning(data.agent_running)
-      setAwaitingApproval(data.awaiting_approval)
+      if (data.status === "offline") {
+        setBackendOnline(false)
+        setAgentRunning(false)
+      } else {
+        setBackendOnline(true)
+        setAgentRunning(data.agent_running)
+        setAwaitingApproval(data.awaiting_approval)
+      }
     } catch {
       setBackendOnline(false)
       setAgentRunning(false)
@@ -58,11 +63,13 @@ export function useAgentStream(): UseAgentStreamResult {
 
   useEffect(() => {
     pollStatus()
-    statusTimer.current = setInterval(pollStatus, 2000)
+    // Poll every 2s when online, 5s when offline to reduce noise
+    const interval = backendOnline === false ? 5000 : 2000
+    statusTimer.current = setInterval(pollStatus, interval)
     return () => {
       if (statusTimer.current) clearInterval(statusTimer.current)
     }
-  }, [pollStatus])
+  }, [pollStatus, backendOnline])
 
   // ── SSE stream ──────────────────────────────────────────────────────────
   const openStream = useCallback(() => {
