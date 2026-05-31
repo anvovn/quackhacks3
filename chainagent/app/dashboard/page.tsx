@@ -1498,7 +1498,11 @@ export default function Dashboard() {
                 {section==="inventory" &&<InventorySection brand={brand} suppliers={suppliers} skuSupplierMap={skuSupplierMap} onAssign={(id,suppId)=>setSkuSupplierMap(m=>({...m,[id]:suppId}))}/>}
                 {section==="inbounds"  &&<InboundsSection
                     inbounds={inbounds}
-                    onSetInTransit={(id)=>setInbounds(prev=>prev.map(i=>i.id===id?{...i,status:"in-transit" as const}:i))}
+                    onSetInTransit={(id)=>{
+                      const inbound = inbounds.find(i=>i.id===id)
+                      setInbounds(prev=>prev.map(i=>i.id===id?{...i,status:"in-transit" as const}:i))
+                      if(inbound?.poRef) setOrders(prev=>prev.map(p=>p.ref===inbound.poRef?{...p,status:"in-transit" as const}:p))
+                    }}
                     onReceive={(id,poRef)=>{
                       setInbounds(prev=>prev.filter(i=>i.id!==id))
                       if(poRef) setOrders(prev=>prev.map(p=>p.ref===poRef?{...p,status:"received" as const}:p))
