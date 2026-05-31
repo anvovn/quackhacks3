@@ -109,6 +109,7 @@ export function useAgentStream(): UseAgentStreamResult {
         if (data.tag === "REORDER") {
           try {
             const parsed = JSON.parse(data.msg)
+            console.log("[ChainAgent] REORDER staged:", parsed)
             stagedReorderRef.current = parsed
             setStagedReorder(parsed)
           } catch {}
@@ -142,6 +143,9 @@ export function useAgentStream(): UseAgentStreamResult {
     setEmailResult("")
     setShowReply(false)
     setAgentRunning(true)
+    setPendingReorders([])
+    setStagedReorder(null)
+    stagedReorderRef.current = null
 
     openStream()
 
@@ -202,6 +206,7 @@ export function useAgentStream(): UseAgentStreamResult {
     setEmailResult("")
     setShowReply(false)
     setAwaitingApproval(false)
+    setPendingReorders([])
     stagedReorderRef.current = null
     setStagedReorder(null)
     if (replyTimer.current) clearTimeout(replyTimer.current)
