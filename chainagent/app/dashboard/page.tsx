@@ -693,7 +693,7 @@ function OrderHistorySection({orders, auditRows, inbounds, onUpdateOrder, onClea
         }
       />
 
-      {/* Purchase Orders */
+      {/* Purchase Orders */}
       <Panel>
         <PanelHeader title="📋 Purchase Orders"/>
         {orders.length===0?(
