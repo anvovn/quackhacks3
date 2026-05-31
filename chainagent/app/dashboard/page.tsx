@@ -188,7 +188,7 @@ function SectionHeader({eyebrow,title,hook,action}:{eyebrow?:string,title:string
 }
 
 // ── SECTION COMPONENTS ──
-function OverviewSection({brand,onRunAgent,onViewAllReorders}:{brand:Brand,onRunAgent:()=>void,onViewAllReorders:()=>void}) {
+function OverviewSection({brand,orders,onRunAgent,onViewAllReorders}:{brand:Brand,orders:PurchaseOrder[],onRunAgent:()=>void,onViewAllReorders:()=>void}) {
   return (
     <>
       <SectionHeader eyebrow={`// overview · ${brand.name}`} title="Supply Chain Dashboard" action={<Btn variant="primary" onClick={onRunAgent}>▶ Run Agent Now</Btn>}/>
@@ -235,16 +235,16 @@ function OverviewSection({brand,onRunAgent,onViewAllReorders}:{brand:Brand,onRun
           </div>
         </Panel>
         <Panel>
-          <PanelHeader title="📦 Reorder History" actions={<Btn onClick={onViewAllReorders}>View all →</Btn>}/>
-          {[
-            {name:`${brand.skus[1]?.name||""} · 800u`,sub:"Pending approval · $10,000",status:<StatusPill label="Pending" type="pending"/>,date:"Today"},
-            {name:`${brand.skus[0]?.name||""} · 500u`,sub:"May 14 · $5,000",status:<StatusPill label="Delivered" type="live"/>,date:"May 28"},
-            {name:`${brand.skus[1]?.name||""} · 600u`,sub:"Apr 28 · $7,500",status:<StatusPill label="Delivered" type="live"/>,date:"May 12"},
-          ].map((h,i)=>(
-            <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 80px 60px",gap:8,padding:"11px 18px",borderBottom:i<2?"1px solid var(--border)":"none",fontSize:12,alignItems:"center"}}>
-              <div><div style={{fontSize:12,fontWeight:500,color:"var(--text)"}}>{h.name}</div><div style={{...S.mono,fontSize:9,color:"var(--muted)"}}>{h.sub}</div></div>
-              {h.status}
-              <span style={{...S.mono,fontSize:10,color:"var(--muted)"}}>{h.date}</span>
+          <PanelHeader title="📦 Order History" actions={<Btn onClick={onViewAllReorders}>View all →</Btn>}/>
+          {orders.length===0?(
+            <div style={{...S.mono,fontSize:11,color:"var(--muted)",textAlign:"center" as const,padding:"28px 0"}}>
+              No orders yet — run the agent and approve a reorder to see history here.
+            </div>
+          ):orders.slice(0,3).map((po,i)=>(
+            <div key={po.ref} style={{display:"grid",gridTemplateColumns:"1fr 90px 60px",gap:8,padding:"11px 18px",borderBottom:i<Math.min(orders.length,3)-1?"1px solid var(--border)":"none",fontSize:12,alignItems:"center"}}>
+              <div><div style={{fontSize:12,fontWeight:500,color:"var(--text)"}}>{po.sku} · {po.qty.toLocaleString()}u</div><div style={{...S.mono,fontSize:9,color:"var(--muted)"}}>{po.supplier} · {po.orderDate}</div></div>
+              <StatusPill label={po.status==="received"?"Received":po.status==="in-transit"?"In Transit":po.status==="confirmed"?"Confirmed":"Sent"} type={po.status==="received"?"live":po.status==="in-transit"?"transit":"draft"}/>
+              <span style={{...S.mono,fontSize:10,color:"var(--muted)"}}>{po.ref}</span>
             </div>
           ))}
         </Panel>
@@ -562,92 +562,95 @@ function SuppliersSection({suppliers, onAdd, onUpdate}:{suppliers:Supplier[], on
   )
 }
 
-function SupplierOrdersSection({orders: init}:{orders:PurchaseOrder[]}) {
-  const [orders, setOrders] = useState(init)
-  useEffect(()=>setOrders(init),[init])
-
-  const pillType = (s:PurchaseOrder["status"]):React.ComponentProps<typeof StatusPill>["type"] =>
-    s==="received"?"live":s==="in-transit"?"transit":s==="confirmed"?"pending":"draft"
-  const pillLabel = (s:PurchaseOrder["status"]) =>
-    s==="received"?"Received":s==="in-transit"?"In Transit":s==="confirmed"?"Confirmed":"Sent"
+function OrderHistorySection({orders: initOrders, auditRows, pendingReorders}:{orders:PurchaseOrder[], auditRows:AuditRow[], pendingReorders:PendingReorder[]}) {
+  const [orders, setOrders] = useState(initOrders)
+  useEffect(()=>setOrders(initOrders),[initOrders])
 
   const nextStatus:{[k in PurchaseOrder["status"]]:PurchaseOrder["status"]} = {
     "sent":"confirmed","confirmed":"in-transit","in-transit":"received","received":"received"
   }
   const nextLabel = (s:PurchaseOrder["status"]) =>
     s==="sent"?"Mark Confirmed":s==="confirmed"?"Mark In Transit":s==="in-transit"?"Mark Received":""
+  const pillType = (s:PurchaseOrder["status"]):React.ComponentProps<typeof StatusPill>["type"] =>
+    s==="received"?"live":s==="in-transit"?"transit":s==="confirmed"?"pending":"draft"
+  const pillLabel = (s:PurchaseOrder["status"]) =>
+    s==="received"?"Received":s==="in-transit"?"In Transit":s==="confirmed"?"Confirmed":"Sent"
 
-  function advance(ref:string) {
-    setOrders(prev=>prev.map(po=>po.ref===ref?{...po,status:nextStatus[po.status]}:po))
-  }
-
-  return (
-    <>
-      <SectionHeader eyebrow="// supplier orders" title="Supplier Orders"/>
-      <Panel>
-        {orders.length===0?(
-          <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"48px 0",gap:10}}>
-            <div style={{fontSize:28}}>📋</div>
-            <div style={{...S.display,fontSize:15,fontWeight:700}}>No supplier orders yet</div>
-            <div style={{...S.mono,fontSize:11,color:"var(--muted)",textAlign:"center" as const,maxWidth:340,lineHeight:1.7}}>
-              Purchase orders appear here when ChainAgent emails a supplier and you approve the reorder.
-            </div>
-          </div>
-        ):(<>
-          <RowHead cols="110px 1fr 1fr 60px 110px 110px 110px 120px">
-            <Th>PO Ref</Th><Th>SKU</Th><Th>Supplier</Th><Th>Qty</Th><Th>Order Date</Th><Th>ETA</Th><Th>Status</Th><Th>Action</Th>
-          </RowHead>
-          {orders.map((po,i)=>(
-            <div key={po.ref} style={{display:"grid",gridTemplateColumns:"110px 1fr 1fr 60px 110px 110px 110px 120px",gap:10,padding:"12px 18px",borderBottom:i<orders.length-1?"1px solid var(--border)":"none",alignItems:"center",background:po.status==="received"?"rgba(0,229,160,0.02)":"transparent"}}>
-              <div style={{...S.mono,fontSize:11,fontWeight:500,color:"var(--text)"}}>{po.ref}</div>
-              <div>
-                <div style={{fontSize:12,color:"var(--text)"}}>{po.sku}</div>
-                <div style={{...S.mono,fontSize:9,color:"var(--muted)"}}>{po.skuId}</div>
-              </div>
-              <div>
-                <div style={{fontSize:12,color:"var(--text)"}}>{po.supplier}</div>
-                {po.supplierEmail&&<div style={{...S.mono,fontSize:9,color:"var(--muted)"}}>{po.supplierEmail}</div>}
-              </div>
-              <div style={{...S.mono,fontSize:12}}>{po.qty.toLocaleString()}</div>
-              <div style={{...S.mono,fontSize:11,color:"var(--muted)"}}>{po.orderDate}</div>
-              <div style={{...S.mono,fontSize:11,color:po.status==="received"?"var(--accent)":"var(--text)"}}>{po.eta}</div>
-              <StatusPill label={pillLabel(po.status)} type={pillType(po.status)}/>
-              {po.status!=="received"?(
-                <Btn style={{fontSize:10,padding:"4px 10px"}} onClick={()=>advance(po.ref)}>{nextLabel(po.status)}</Btn>
-              ):(
-                <div style={{...S.mono,fontSize:10,color:"var(--accent)"}}>✓ Complete</div>
-              )}
-            </div>
-          ))}
-        </>)}
-      </Panel>
-    </>
-  )
-}
-
-function LogsSection({auditRows}:{auditRows:AuditRow[]}) {
   function exportCSV() {
-    const header = "Time,Action,SKU,Status\n"
-    const rows = auditRows.map(r=>`"${r.time}","${r.action}","${r.sku}","${r.label}"`).join("\n")
+    const header = "Time,Event,SKU,Detail,Status\n"
+    const rows = auditRows.map(r=>`"${r.time}","${r.action}","${r.sku}","","${r.label}"`).join("\n")
     const blob = new Blob([header+rows],{type:"text/csv"})
     const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href=url; a.download="audit-log.csv"; a.click()
+    const a = document.createElement("a"); a.href=url; a.download="order-history.csv"; a.click()
     URL.revokeObjectURL(url)
   }
+
+  const isEmpty = orders.length===0 && auditRows.length===0 && pendingReorders.length===0
+
   return (
     <>
-      <SectionHeader eyebrow="// audit log" title="Audit Log" hook="← snowflake_log.py" action={<Btn onClick={exportCSV}>↓ Export CSV</Btn>}/>
+      <SectionHeader eyebrow="// order history" title="Order History" action={<Btn onClick={exportCSV}>↓ Export CSV</Btn>}/>
+
+      {/* Purchase Orders */}
       <Panel>
-        <RowHead cols="100px 1fr 90px 80px"><Th>Time</Th><Th>Action</Th><Th>SKU</Th><Th>Status</Th></RowHead>
-        {auditRows.map((r,i)=>(
-          <div key={i} style={{display:"grid",gridTemplateColumns:"100px 1fr 90px 80px",gap:10,padding:"10px 18px",borderBottom:"1px solid var(--border)",alignItems:"center",fontSize:12}}>
-            <div style={{...S.mono,fontSize:10,color:"var(--muted)"}}>{r.time}</div>
-            <div>{r.action}</div>
-            <div style={{...S.mono,fontSize:10,color:"var(--muted2)"}}>{r.sku}</div>
-            <div><StatusPill label={r.label} type={r.label==="Sent"||r.label==="Paid"||r.label==="Created"?"live":r.label==="Cancelled"?"draft":"pending"}/></div>
+        <PanelHeader title="📋 Purchase Orders"/>
+        {orders.length===0?(
+          <div style={{...S.mono,fontSize:11,color:"var(--muted)",textAlign:"center" as const,padding:"24px 0"}}>
+            No purchase orders yet — approve an agent reorder to create one.
           </div>
-        ))}
+        ):<>
+          <RowHead cols="110px 1fr 1fr 60px 110px 110px 120px">
+            <Th>PO Ref</Th><Th>SKU</Th><Th>Supplier</Th><Th>Qty</Th><Th>Date</Th><Th>Status</Th><Th>Action</Th>
+          </RowHead>
+          {orders.map((po,i)=>(
+            <div key={po.ref} style={{display:"grid",gridTemplateColumns:"110px 1fr 1fr 60px 110px 110px 120px",gap:10,padding:"12px 18px",borderBottom:i<orders.length-1?"1px solid var(--border)":"none",alignItems:"center",background:po.status==="received"?"rgba(0,229,160,0.02)":"transparent"}}>
+              <div style={{...S.mono,fontSize:11,color:"var(--text)"}}>{po.ref}</div>
+              <div><div style={{fontSize:12,color:"var(--text)"}}>{po.sku}</div><div style={{...S.mono,fontSize:9,color:"var(--muted)"}}>{po.skuId}</div></div>
+              <div><div style={{fontSize:12,color:"var(--text)"}}>{po.supplier}</div>{po.supplierEmail&&<div style={{...S.mono,fontSize:9,color:"var(--muted)"}}>{po.supplierEmail}</div>}</div>
+              <div style={{...S.mono,fontSize:12}}>{po.qty.toLocaleString()}</div>
+              <div style={{...S.mono,fontSize:11,color:"var(--muted)"}}>{po.orderDate}</div>
+              <StatusPill label={pillLabel(po.status)} type={pillType(po.status)}/>
+              {po.status!=="received"
+                ?<Btn style={{fontSize:10,padding:"4px 10px"}} onClick={()=>setOrders(prev=>prev.map(p=>p.ref===po.ref?{...p,status:nextStatus[p.status]}:p))}>{nextLabel(po.status)}</Btn>
+                :<div style={{...S.mono,fontSize:10,color:"var(--accent)"}}>✓ Complete</div>}
+            </div>
+          ))}
+        </>}
+      </Panel>
+
+      {/* Stock Inbounds (in transit) */}
+      {pendingReorders.length>0&&(
+        <Panel>
+          <PanelHeader title="📥 Stock Inbounds (In Transit)"/>
+          <RowHead cols="1fr 1fr 80px"><Th>SKU</Th><Th>Supplier</Th><Th>Qty</Th></RowHead>
+          {pendingReorders.map((r,i)=>(
+            <div key={r.id} style={{display:"grid",gridTemplateColumns:"1fr 1fr 80px",gap:10,padding:"12px 18px",borderBottom:i<pendingReorders.length-1?"1px solid var(--border)":"none",alignItems:"center"}}>
+              <div style={{fontSize:12,color:"var(--text)"}}>{r.name}</div>
+              <div style={{...S.mono,fontSize:11,color:"var(--muted)"}}>{r.supplier}</div>
+              <div style={{...S.mono,fontSize:12}}>{r.qty.toLocaleString()}</div>
+            </div>
+          ))}
+        </Panel>
+      )}
+
+      {/* Agent Activity Log */}
+      <Panel>
+        <PanelHeader title="🤖 Agent Activity Log"/>
+        {auditRows.length===0?(
+          <div style={{...S.mono,fontSize:11,color:"var(--muted)",textAlign:"center" as const,padding:"24px 0"}}>
+            {isEmpty?"No activity yet — run the agent to get started.":"No activity logged yet."}
+          </div>
+        ):<>
+          <RowHead cols="110px 1fr 100px 80px"><Th>Time</Th><Th>Event</Th><Th>SKU</Th><Th>Status</Th></RowHead>
+          {auditRows.map((r,i)=>(
+            <div key={i} style={{display:"grid",gridTemplateColumns:"110px 1fr 100px 80px",gap:10,padding:"10px 18px",borderBottom:i<auditRows.length-1?"1px solid var(--border)":"none",alignItems:"center",fontSize:12}}>
+              <div style={{...S.mono,fontSize:10,color:"var(--muted)"}}>{r.time}</div>
+              <div style={{color:"var(--text)"}}>{r.action}</div>
+              <div style={{...S.mono,fontSize:10,color:"var(--muted2)"}}>{r.sku}</div>
+              <StatusPill label={r.label} type={r.label==="Sent"?"live":r.label==="Cancelled"?"draft":"pending"}/>
+            </div>
+          ))}
+        </>}
       </Panel>
     </>
   )
@@ -684,9 +687,18 @@ function NotificationsSection() {
   )
 }
 
-function SettingsSection() {
+type AgentSettings = { autoApprove:boolean; scheduleEnabled:boolean; scheduleIntervalHrs:number; autoSendWindowHrs:number; riskThresholdDays:number }
+
+function SettingsSection({agentSettings, onSaveSettings}:{agentSettings:AgentSettings, onSaveSettings:(s:AgentSettings)=>void}) {
   const { data: session } = useSession()
-  const [settings,setSettings] = useState({autoApprove:false,voice:true,snowflake:true,schedule:true})
+  const [draft, setDraft] = useState(agentSettings)
+  const [saved, setSaved] = useState(false)
+
+  function save() {
+    onSaveSettings(draft)
+    setSaved(true)
+    setTimeout(()=>setSaved(false), 1500)
+  }
 
   // ── Shopify connection state ──
   const [shopifyConnected, setShopifyConnected] = useState<boolean|null>(null)
@@ -742,30 +754,31 @@ function SettingsSection() {
       <Panel>
         <PanelHeader title="◎ Agent Configuration"/>
         <div style={{padding:16,display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
-          {[
-            {key:"autoApprove",label:"Auto-approve reorders",sub:"Send without manual approval"},
-            {key:"voice",      label:"Voice alerts",         sub:"ElevenLabs audio"},
-            {key:"snowflake",  label:"Snowflake logging",    sub:"Log all actions"},
-            {key:"schedule",   label:"Auto-schedule agent",  sub:"Run every X hours"},
-          ].map(({key,label,sub})=>(
+          {([
+            {key:"autoApprove",    label:"Auto-approve reorders", sub:"Send without manual approval"},
+            {key:"scheduleEnabled",label:"Auto-schedule agent",   sub:"Run on set interval"},
+          ] as {key:keyof AgentSettings, label:string, sub:string}[]).map(({key,label,sub})=>(
             <div key={key} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 13px",background:"var(--surface2)",borderRadius:10,border:"1px solid var(--border)"}}>
               <div><div style={{fontSize:13,color:"var(--text)"}}>{label}</div><div style={{...S.mono,fontSize:10,color:"var(--muted)",marginTop:1}}>{sub}</div></div>
-              <Toggle on={settings[key as keyof typeof settings]} onChange={v=>setSettings(s=>({...s,[key]:v}))}/>
+              <Toggle on={draft[key] as boolean} onChange={v=>setDraft(d=>({...d,[key]:v}))}/>
             </div>
           ))}
-          {[
-            {label:"Risk threshold (days)",sub:"Alert below this level",val:"21"},
-            {label:"Auto-send window (hrs)",sub:"Hours before auto-approve",val:"2"},
-            {label:"Schedule interval (hrs)",sub:"How often agent runs",val:"2"},
-            {label:"Reorder buffer (days)",sub:"Safety stock buffer",val:"30"},
-          ].map(({label,sub,val})=>(
-            <div key={label} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 13px",background:"var(--surface2)",borderRadius:10,border:"1px solid var(--border)"}}>
+          {([
+            {key:"riskThresholdDays",  label:"Risk threshold (days)",    sub:"Flag SKUs below this runway"},
+            {key:"autoSendWindowHrs",  label:"Auto-send window (hrs)",   sub:"Hrs before auto-approve fires"},
+            {key:"scheduleIntervalHrs",label:"Schedule interval (hrs)",  sub:"How often agent auto-runs"},
+          ] as {key:keyof AgentSettings, label:string, sub:string}[]).map(({key,label,sub})=>(
+            <div key={key} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 13px",background:"var(--surface2)",borderRadius:10,border:"1px solid var(--border)"}}>
               <div><div style={{fontSize:13,color:"var(--text)"}}>{label}</div><div style={{...S.mono,fontSize:10,color:"var(--muted)",marginTop:1}}>{sub}</div></div>
-              <input defaultValue={val} type="number" style={{...S.mono,background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:6,padding:"5px 9px",color:"var(--text)",fontSize:11,outline:"none",width:85}}/>
+              <input value={draft[key] as number} type="number" min={1}
+                onChange={e=>setDraft(d=>({...d,[key]:Math.max(1,parseInt(e.target.value)||1)}))}
+                style={{...S.mono,background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:6,padding:"5px 9px",color:"var(--text)",fontSize:11,outline:"none",width:70}}/>
             </div>
           ))}
         </div>
-        <div style={{padding:"0 16px 16px"}}><Btn variant="primary">Save Changes</Btn></div>
+        <div style={{padding:"0 16px 16px"}}>
+          <Btn variant={saved?"ghost":"primary"} onClick={save}>{saved?"Saved ✓":"Save Changes"}</Btn>
+        </div>
       </Panel>
       <Panel>
         <PanelHeader title={<>🔌 API Connections <BeHook>← .env.local</BeHook></>}/>
@@ -957,9 +970,12 @@ export default function Dashboard() {
   const [section, setSection]     = useState("overview")
   const [syncSecs, setSyncSecs]   = useState(0)
   const [syncPhase, setSyncPhase] = useState<"idle"|"syncing"|"done">("idle")
-  const [scheduleSecs, setScheduleSecs] = useState(7200)
-  const [scheduleOn, setScheduleOn]     = useState(true)
-  const [cdSecs, setCdSecs]       = useState(7200)
+  const [agentSettings, setAgentSettings] = useState({
+    autoApprove: false, scheduleEnabled: false,
+    scheduleIntervalHrs: 2, autoSendWindowHrs: 2, riskThresholdDays: 14,
+  })
+  const [scheduleSecs, setScheduleSecs] = useState(agentSettings.scheduleIntervalHrs * 3600)
+  const [cdSecs, setCdSecs]       = useState(agentSettings.autoSendWindowHrs * 3600)
   const [liveSkus, setLiveSkus]   = useState<RawSKU[] | "error" | null>(null)
   const [auditRows, setAuditRows] = useState<AuditRow[]>([])
   const [suppliers,        setSuppliers]        = useState<Supplier[]>([])
@@ -987,6 +1003,18 @@ export default function Dashboard() {
   useEffect(()=>{
     try { localStorage.setItem(`chainagent:${userKey}:skuSupplierMap`, JSON.stringify(skuSupplierMap)) } catch {}
   },[userKey, skuSupplierMap])
+
+  // persist agent settings
+  useEffect(()=>{
+    try {
+      const raw = localStorage.getItem(`chainagent:${userKey}:agentSettings`)
+      if(raw) setAgentSettings(JSON.parse(raw))
+    } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[userKey])
+  useEffect(()=>{
+    try { localStorage.setItem(`chainagent:${userKey}:agentSettings`, JSON.stringify(agentSettings)) } catch {}
+  },[userKey, agentSettings])
   const cdInt = useRef<ReturnType<typeof setInterval>|null>(null)
 
   // ── real backend hook ──
@@ -1073,17 +1101,23 @@ export default function Dashboard() {
     return ()=>clearInterval(t)
   },[])
 
-  // Schedule countdown
+  // Schedule countdown — auto-runs agent when interval expires
   useEffect(()=>{
-    if(!scheduleOn){return}
-    const t=setInterval(()=>{
+    if(!agentSettings.scheduleEnabled) return
+    const interval = agentSettings.scheduleIntervalHrs * 3600
+    setScheduleSecs(interval)
+    const t = setInterval(()=>{
       setScheduleSecs(s=>{
-        if(s<=1){return 7200}
+        if(s<=1){
+          handleRunAgent()
+          return interval
+        }
         return s-1
       })
     },1000)
     return ()=>clearInterval(t)
-  },[scheduleOn])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[agentSettings.scheduleEnabled, agentSettings.scheduleIntervalHrs])
 
   // When supplier replies → confirm the pending PO
   useEffect(()=>{
@@ -1094,12 +1128,23 @@ export default function Dashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[showReply])
 
-  // Countdown for email approval
+  // Countdown for email approval — auto-approves if setting is on
   useEffect(()=>{
     if(showEmail&&!emailResult){
-      cdInt.current=setInterval(()=>setCdSecs(s=>Math.max(0,s-1)),1000)
+      const window = agentSettings.autoSendWindowHrs * 3600
+      setCdSecs(window)
+      cdInt.current=setInterval(()=>{
+        setCdSecs(s=>{
+          if(s<=1){
+            if(agentSettings.autoApprove) handleApprove()
+            return 0
+          }
+          return s-1
+        })
+      },1000)
     }
     return ()=>{if(cdInt.current)clearInterval(cdInt.current)}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   },[showEmail,emailResult])
 
   const fmt = (s:number)=>{
@@ -1163,16 +1208,15 @@ export default function Dashboard() {
   },[syncPhase])
 
   const navItems = [
-    {id:"overview",icon:"◈",label:"Monitor"},
-    {id:"agent",   icon:"⚡",label:"Monitor",badge:"1 alert",badgeColor:"red"},
-    {id:"inventory",icon:"◫",label:"Monitor"},
-    {id:"inbounds",icon:"📥",label:"Monitor",badge:pendingReorders.length>0?String(pendingReorders.length):undefined,badgeColor:"amber"},
-    {id:"orders",  icon:"📦",label:"Monitor",badge:"2 issues",badgeColor:"red"},
-    {id:"suppliers",icon:"◉",label:"Manage"},
-    {id:"invoices",icon:"💳",label:"Manage"},
-    {id:"logs",    icon:"≡", label:"Manage",badge:String(auditRows.length),badgeColor:"green"},
-    {id:"notifications",icon:"🔔",label:"Manage"},
-    {id:"settings",icon:"◎",label:"Manage"},
+    {id:"overview",    name:"Overview",       icon:"◈", label:"Monitor"},
+    {id:"agent",       name:"Run Agent",      icon:"⚡", label:"Monitor"},
+    {id:"inventory",   name:"Inventory",      icon:"◫", label:"Monitor"},
+    {id:"inbounds",    name:"Stock Inbounds", icon:"📥",label:"Monitor",badge:pendingReorders.length>0?String(pendingReorders.length):undefined,badgeColor:"amber"},
+    {id:"orders",      name:"Orders",         icon:"📦",label:"Monitor"},
+    {id:"suppliers",   name:"Suppliers",      icon:"◉", label:"Manage"},
+    {id:"history",     name:"Agent Order History",icon:"≡",label:"Manage",badge:auditRows.length>0?String(auditRows.length):undefined,badgeColor:"green"},
+    {id:"notifications",name:"Notifications", icon:"🔔",label:"Manage"},
+    {id:"settings",    name:"Settings",       icon:"◎", label:"Manage"},
   ]
 
   const sectionGroups = {Monitor:navItems.filter(n=>n.label==="Monitor"), Manage:navItems.filter(n=>n.label==="Manage")}
@@ -1256,7 +1300,7 @@ export default function Dashboard() {
                 {items.map(item=>(
                   <button key={item.id} id={`nav-${item.id}`} onClick={()=>setSection(item.id)} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 10px",borderRadius:8,cursor:"pointer",transition:"all 0.15s",color:section===item.id?"var(--accent)":"var(--muted2)",fontSize:13,border:section===item.id?"1px solid var(--accent-mid)":"none",background:section===item.id?"var(--accent-dim)":"none",width:"100%",textAlign:"left" as const}}>
                     <span style={{width:15,textAlign:"center" as const,flexShrink:0,fontSize:13}}>{item.icon}</span>
-                    {item.label==="Monitor"?["Overview","Run Agent","Inventory","Stock Inbounds","Orders"][navItems.findIndex(n=>n.id===item.id)]:["Suppliers","Supplier Orders","Audit Log","Notifications","Settings"][navItems.filter(n=>n.label==="Manage").findIndex(n=>n.id===item.id)]}
+                    {item.name}
                     {item.badge&&<span style={{marginLeft:"auto",...S.mono,fontSize:9,padding:"2px 6px",borderRadius:100,background:item.badgeColor==="red"?"var(--red-dim)":item.badgeColor==="green"?"var(--accent-dim)":"var(--amber-dim)",color:item.badgeColor==="red"?"var(--red)":item.badgeColor==="green"?"var(--accent)":"var(--amber)"}}>{item.badge}</span>}
                   </button>
                 ))}
@@ -1270,7 +1314,7 @@ export default function Dashboard() {
             <div style={{...S.mono,fontSize:9,color:"var(--muted)",marginTop:1}}>until next auto-run</div>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:9}}>
               <span style={{fontSize:11,color:"var(--muted2)"}}>Auto-run</span>
-              <Toggle on={scheduleOn} onChange={setScheduleOn}/>
+              <Toggle on={agentSettings.scheduleEnabled} onChange={v=>setAgentSettings(s=>({...s,scheduleEnabled:v}))}/>
             </div>
           </div>
           <div style={{marginTop:"auto",padding:12}}>
@@ -1308,7 +1352,7 @@ export default function Dashboard() {
               </div>
             ) : (
               <>
-                {section==="overview"  &&<OverviewSection brand={brand} onRunAgent={()=>{setSection("agent");setTimeout(handleRunAgent,200)}} onViewAllReorders={()=>setSection("logs")}/>}
+                {section==="overview"  &&<OverviewSection brand={brand} orders={orders} onRunAgent={()=>{setSection("agent");setTimeout(handleRunAgent,200)}} onViewAllReorders={()=>setSection("history")}/>}
                 {section==="agent"     &&(
                   suppliers.length===0?(
                     <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:320,gap:12}}>
@@ -1337,10 +1381,9 @@ export default function Dashboard() {
             )
           )}
           {section==="suppliers" && (shopifyConnected===null?null:shopifyConnected===false?<ShopifyGate onSettings={()=>setSection("settings")}/>:<SuppliersSection suppliers={suppliers} onAdd={s=>setSuppliers(prev=>[...prev,s])} onUpdate={s=>setSuppliers(prev=>prev.map(p=>p.id===s.id?s:p))}/>)}
-          {section==="invoices"  && <SupplierOrdersSection orders={orders}/>}
-          {section==="logs"        &&<LogsSection auditRows={auditRows}/>}
+          {section==="history"   && <OrderHistorySection orders={orders} auditRows={auditRows} pendingReorders={pendingReorders}/>}
           {section==="notifications"&&<NotificationsSection/>}
-          {section==="settings"    &&<SettingsSection/>}
+          {section==="settings"    &&<SettingsSection agentSettings={agentSettings} onSaveSettings={setAgentSettings}/>}
         </main>
       </div>
     </>
