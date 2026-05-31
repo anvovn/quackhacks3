@@ -1,5 +1,7 @@
 "use client"
 import { useState, useEffect, useRef, useCallback } from "react"
+import { useAgentStream } from "./hooks/useAgentStream"
+import type { TraceLine } from "./hooks/useAgentStream"
 
 // ── TYPES ──
 interface SKU {
@@ -11,7 +13,10 @@ interface Brand {
   incoming: string; crit: string; agentTitle: string
   supplier: string; email: string; skus: SKU[]
 }
-interface TraceLine { tag: string; msg: string; time: string }
+interface RawSKU {
+  name: string; stock: number; velocity_per_day: number
+  lead_time_days: number; supplier_name: string; reorder_qty: number
+}
 interface AuditRow { time: string; action: string; sku: string; label: string }
 
 // ── BRAND DATA ──
@@ -602,8 +607,8 @@ function SettingsSection() {
 }
 
 // ── AGENT SECTION ──
-function AgentSection({brand,agentRunning,trace,showEmail,emailResult,showReply,cdVal,onRun,onReset,onApprove,onCancel}:{
-  brand:Brand,agentRunning:boolean,trace:TraceLine[],showEmail:boolean,emailResult:string,showReply:boolean,cdVal:string,
+function AgentSection({brand,agentRunning,trace,showEmail,emailResult,showReply,cdVal,emailContent,onRun,onReset,onApprove,onCancel}:{
+  brand:Brand,agentRunning:boolean,trace:TraceLine[],showEmail:boolean,emailResult:string,showReply:boolean,cdVal:string,emailContent:string,
   onRun:()=>void,onReset:()=>void,onApprove:()=>void,onCancel:()=>void
 }) {
   const traceRef = useRef<HTMLDivElement>(null)
@@ -622,7 +627,7 @@ function AgentSection({brand,agentRunning,trace,showEmail,emailResult,showReply,
           <span style={{width:9,height:9,borderRadius:"50%",background:"#f59e0b",display:"inline-block"}}/>
           <span style={{width:9,height:9,borderRadius:"50%",background:"#22c55e",display:"inline-block"}}/>
           <span style={{...S.mono,fontSize:10,color:"var(--muted)",marginLeft:6}}>{brand.agentTitle}</span>
-          {agentRunning&&trace.length<TRACE_SCRIPT.length&&(
+          {agentRunning&&(
             <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:5,...S.mono,fontSize:10,color:"var(--accent)"}}>
               <span className="agent-dot" style={{width:5,height:5,borderRadius:"50%",background:"var(--accent)",display:"inline-block"}}/>agent running
             </div>
@@ -649,7 +654,7 @@ function AgentSection({brand,agentRunning,trace,showEmail,emailResult,showReply,
           </div>
           <div style={{padding:"12px 18px",borderBottom:"1px solid var(--border)"}}>
             <div style={{...S.mono,fontSize:11,lineHeight:1.9,color:"var(--text)",background:"var(--surface2)",borderRadius:8,padding:"12px 14px",whiteSpace:"pre-wrap"}}>
-              {`Hi,\n\nWe need to place an urgent reorder for 800 units of ${brand.skus[1]?.name||""} (SKU: ${brand.skus[1]?.id||""}).\n\nCurrent stock covers approximately 9 days. Lead time is 21 days. Please confirm availability and earliest ship date.\n\nTotal order value: $10,000 USD (800 × $12.50)\n\nBest,\n${brand.name} Operations Team\n\n— Sent by ChainAgent`}
+              {emailContent || `Hi,\n\nWe need to place an urgent reorder for 800 units of ${brand.skus[1]?.name||""} (SKU: ${brand.skus[1]?.id||""}).\n\nCurrent stock covers approximately 9 days. Lead time is 21 days. Please confirm availability and earliest ship date.\n\nTotal order value: $10,000 USD (800 × $12.50)\n\nBest,\n${brand.name} Operations Team\n\n— Sent by ChainAgent`}
             </div>
           </div>
           {!emailResult?(
@@ -682,21 +687,65 @@ export default function Dashboard() {
   const [syncSecs, setSyncSecs]   = useState(0)
   const [scheduleSecs, setScheduleSecs] = useState(7200)
   const [scheduleOn, setScheduleOn]     = useState(true)
-  const [agentRunning, setAgentRunning] = useState(false)
-  const [trace, setTrace]         = useState<TraceLine[]>([])
-  const [showEmail, setShowEmail] = useState(false)
-  const [emailResult, setEmailResult] = useState("")
-  const [showReply, setShowReply] = useState(false)
   const [cdSecs, setCdSecs]       = useState(7200)
+  const [liveSkus, setLiveSkus]   = useState<RawSKU[] | null>(null)
   const [auditRows, setAuditRows] = useState<AuditRow[]>([
     {time:"Today 09:14",action:"Reorder drafted · 800 units · $10,000",sku:"FOCL-EC999002",label:"Pending"},
     {time:"Yesterday",  action:"Inbound INB-2026-029 created · 400 units",sku:"FOCL-EC999003",label:"Created"},
     {time:"May 28",     action:"Reorder approved & sent · 500 units",sku:"FOCL-EC999001",label:"Sent"},
     {time:"May 26",     action:"Discrepancy flagged · 50 unit shortfall",sku:"FOCL-EC999003",label:"Open"},
   ])
-  const cdInt  = useRef<ReturnType<typeof setInterval>|null>(null)
-  const replyTimer = useRef<ReturnType<typeof setTimeout>|null>(null)
-  const brand  = BRANDS[brandId]
+  const cdInt = useRef<ReturnType<typeof setInterval>|null>(null)
+
+  // ── real backend hook ──
+  const stream = useAgentStream()
+  const { agentRunning, showEmail, emailResult, showReply, backendOnline } = stream
+
+  // ── load real SKU data ──
+  useEffect(()=>{
+    fetch("/api/skus")
+      .then(r=>r.json())
+      .then((data: RawSKU[])=>setLiveSkus(data))
+      .catch(()=>{}) // fall back to hardcoded BRANDS
+  },[])
+
+  // Build the active brand: prefer live SKU data when loaded
+  const brand: Brand = (() => {
+    if (liveSkus) {
+      // Map raw SKUs into the dashboard SKU format
+      const mappedSkus: SKU[] = liveSkus.map((s, i) => {
+        const days = s.stock / s.velocity_per_day
+        const risk = days < s.lead_time_days ? "Critical" : days < s.lead_time_days * 2 ? "Watch" : "Healthy"
+        const pct  = Math.min(100, Math.round((days / (s.lead_time_days * 3)) * 100))
+        return {
+          name: s.name,
+          id: `SKU-${String(i+1).padStart(3,"0")}`,
+          stock: s.stock.toLocaleString(),
+          inc: "—",
+          vel: `${s.velocity_per_day}/day`,
+          days: days.toFixed(1),
+          pct,
+          risk,
+          rc: risk==="Critical"?"risk-critical":risk==="Watch"?"risk-watch":"risk-ok",
+        }
+      })
+      const critSku = mappedSkus.reduce((a,b)=>parseFloat(a.days)<parseFloat(b.days)?a:b)
+      const totalStock = liveSkus.reduce((a,s)=>a+s.stock,0)
+      return {
+        name: "Live Inventory",
+        label: "brand: Live Data",
+        days: critSku.days,
+        stock: totalStock.toLocaleString(),
+        incoming: "—",
+        crit: critSku.name.toUpperCase(),
+        agentTitle: `chainagent-runtime · ${mappedSkus.length} SKUs monitored`,
+        supplier: liveSkus[0]?.supplier_name ?? "—",
+        email: "supplier@example.com",
+        skus: mappedSkus,
+      }
+    }
+    return BRANDS[brandId]
+  })()
 
   // Sync timer
   useEffect(()=>{
@@ -716,7 +765,7 @@ export default function Dashboard() {
     return ()=>clearInterval(t)
   },[scheduleOn])
 
-  // Countdown for email
+  // Countdown for email approval
   useEffect(()=>{
     if(showEmail&&!emailResult){
       cdInt.current=setInterval(()=>setCdSecs(s=>Math.max(0,s-1)),1000)
@@ -731,50 +780,30 @@ export default function Dashboard() {
     return `${h}:${m}:${sc}`
   }
 
+  // ── delegate agent actions to real hook ──
   const handleRunAgent = useCallback(()=>{
-    if(agentRunning) return
-    setAgentRunning(true)
-    setTrace([])
-    setShowEmail(false)
-    setEmailResult("")
-    setShowReply(false)
-    setCdSecs(7200)
-    TRACE_SCRIPT.forEach((l,i)=>{
-      setTimeout(()=>{
-        const now=new Date().toLocaleTimeString("en-US",{hour12:false})
-        setTrace(prev=>[...prev,{tag:l.tag,msg:l.msg,time:now}])
-        if(i===TRACE_SCRIPT.length-1){
-          setTimeout(()=>setShowEmail(true),500)
-        }
-      },l.d)
-    })
-  },[agentRunning])
+    stream.runAgent()
+  },[stream])
 
   const handleApprove = useCallback(()=>{
     if(cdInt.current)clearInterval(cdInt.current)
-    setEmailResult("✓ Email sent to supplier · Logged to Snowflake · Inbound auto-created")
-    const now=new Date().toLocaleTimeString("en-US",{hour12:false})
-    setTrace(prev=>[...prev,{tag:"REPLY",msg:"Supplier confirmed · 800 units · ships Monday ✓",time:now}])
-    setAuditRows(prev=>[{time:`Today ${new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})}`,action:"Reorder approved & sent · 800 units · $10,000",sku:"FOCL-EC999002",label:"Sent"},...prev])
-    replyTimer.current=setTimeout(()=>setShowReply(true),2500)
-  },[])
+    stream.approve()
+    const now=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})
+    setAuditRows(prev=>[{time:`Today ${now}`,action:"Reorder approved & sent · via ChainAgent",sku:brand.skus[0]?.id||"",label:"Sent"},...prev])
+  },[stream, brand.skus])
 
   const handleCancel = useCallback(()=>{
     if(cdInt.current)clearInterval(cdInt.current)
-    setEmailResult("✗ Action cancelled by founder")
-    setAuditRows(prev=>[{time:`Today ${new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})}`,action:"Reorder cancelled by founder",sku:"FOCL-EC999002",label:"Cancelled"},...prev])
-  },[])
+    stream.cancel()
+    const now=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})
+    setAuditRows(prev=>[{time:`Today ${now}`,action:"Reorder cancelled by founder",sku:brand.skus[0]?.id||"",label:"Cancelled"},...prev])
+  },[stream, brand.skus])
 
   const handleReset = useCallback(()=>{
-    setAgentRunning(false)
-    setTrace([])
-    setShowEmail(false)
-    setEmailResult("")
-    setShowReply(false)
+    stream.reset()
     setCdSecs(7200)
     if(cdInt.current)clearInterval(cdInt.current)
-    if(replyTimer.current)clearTimeout(replyTimer.current)
-  },[])
+  },[stream])
 
   const navItems = [
     {id:"overview",icon:"◈",label:"Monitor"},
@@ -823,8 +852,12 @@ export default function Dashboard() {
           <div style={{...S.mono,fontSize:10,color:"var(--muted)",background:"var(--surface2)",padding:"4px 10px",borderRadius:100,border:"1px solid var(--border)",cursor:"pointer"}} onClick={()=>setSection("settings")}>
             Next run: {fmt(scheduleSecs)}
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:6,...S.mono,fontSize:10,padding:"5px 12px",borderRadius:100,border:"1px solid var(--accent-mid)",background:"var(--accent-dim)",color:"var(--accent)"}}>
-            <span className="agent-dot" style={{width:5,height:5,borderRadius:"50%",background:"var(--accent)",display:"inline-block"}}/>Agent ready
+          <div style={{display:"flex",alignItems:"center",gap:6,...S.mono,fontSize:10,padding:"5px 12px",borderRadius:100,
+            border:`1px solid ${backendOnline===false?"rgba(239,68,68,0.3)":backendOnline===null?"rgba(245,158,11,0.3)":"var(--accent-mid)"}`,
+            background:backendOnline===false?"var(--red-dim)":backendOnline===null?"var(--amber-dim)":"var(--accent-dim)",
+            color:backendOnline===false?"var(--red)":backendOnline===null?"var(--amber)":"var(--accent)"}}>
+            <span className={backendOnline?"agent-dot":""} style={{width:5,height:5,borderRadius:"50%",background:backendOnline===false?"var(--red)":backendOnline===null?"var(--amber)":"var(--accent)",display:"inline-block"}}/>
+            {backendOnline===false?"Backend offline":backendOnline===null?"Connecting...":agentRunning?"Agent running":"Agent ready"}
           </div>
         </div>
       </nav>
@@ -873,7 +906,7 @@ export default function Dashboard() {
         {/* MAIN */}
         <main style={{padding:"22px 26px",display:"flex",flexDirection:"column",gap:16,overflow:"hidden"}}>
           {section==="overview"    &&<OverviewSection brand={brand} onRunAgent={()=>{setSection("agent");setTimeout(handleRunAgent,200)}}/>}
-          {section==="agent"       &&<AgentSection brand={brand} agentRunning={agentRunning} trace={trace} showEmail={showEmail} emailResult={emailResult} showReply={showReply} cdVal={fmt(cdSecs)} onRun={handleRunAgent} onReset={handleReset} onApprove={handleApprove} onCancel={handleCancel}/>}
+          {section==="agent"       &&<AgentSection brand={brand} agentRunning={agentRunning} trace={stream.trace} showEmail={showEmail} emailResult={emailResult} showReply={showReply} cdVal={fmt(cdSecs)} onRun={handleRunAgent} onReset={handleReset} onApprove={handleApprove} onCancel={handleCancel} emailContent={stream.emailContent}/>}
           {section==="inventory"   &&<InventorySection brand={brand}/>}
           {section==="inbounds"    &&<InboundsSection brand={brand}/>}
           {section==="orders"      &&<OrdersSection brand={brand}/>}

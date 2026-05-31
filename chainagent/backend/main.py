@@ -1,12 +1,15 @@
 import asyncio
 import json
 import threading
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from agent.chain_agent import run_agent
+
+DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "skus.json"
 
 # ---------------------------------------------------------------------------
 # App
@@ -118,3 +121,10 @@ async def stream():
                 await asyncio.sleep(0.1)
 
     return StreamingResponse(generator(), media_type="text/event-stream")
+
+
+@app.get("/skus")
+async def get_skus():
+    """Return the SKU list from data/skus.json."""
+    with DATA_PATH.open() as f:
+        return json.load(f)
