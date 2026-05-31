@@ -12,7 +12,7 @@ from agent.snowflake_log import log_snowflake
 
 load_dotenv()
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 SUPPLEMENT_PATH   = DATA_DIR / "sku-supplement.json"
@@ -21,7 +21,6 @@ SHOPIFY_CFG_PATH  = DATA_DIR / "shopify-config.json"
 DEFAULT_SUPPLEMENT = {
     "velocity_per_day": 30,
     "lead_time_days": 21,
-    "supplier_name": "Shopify Store",
     "reorder_qty": 500,
 }
 
@@ -87,7 +86,6 @@ def _fetch_shopify_skus(store: str, token: str) -> list[dict]:
                 "stock": variant["inventory_quantity"],
                 "velocity_per_day": supp["velocity_per_day"],
                 "lead_time_days": supp["lead_time_days"],
-                "supplier_name": supp["supplier_name"],
                 "reorder_qty": supp["reorder_qty"],
             })
     return skus
@@ -158,11 +156,13 @@ def generate_text(client, prompt):
     return response.text or ""
 
 
-def run_agent(emit):
+def run_agent(emit, supplier_name: str = "", supplier_email: str = ""):
     client = get_gemini_client()
 
     skus = load_skus(emit)
     emit("WATCH", f"Polling {len(skus)} SKUs...")
+
+    effective_supplier = supplier_name or "your supplier"
 
     for sku in skus:
         days = sku["stock"] / sku["velocity_per_day"]
@@ -183,11 +183,24 @@ def run_agent(emit):
             for line in reasoning.split("."):
                 if line.strip(): emit("THINK", line.strip())
 
-            # Step 2: Gemini drafts email using its own recommended qty
+            # Step 2: Gemini drafts email from real data, no hardcoded placeholders
             emit("ACT", "Drafting supplier email...")
             email = strip_markdown(generate_text(
                 client,
-                f"Draft an urgent reorder email from Portland Optics to {sku['supplier_name']} for {reorder_qty} units of {sku['name']}. Current stock: {sku['stock']} units covering {days:.1f} days. Lead time: {sku['lead_time_days']} days. Sign off as 'Portland Optics Operations Team'. Use plain text only, no markdown, no placeholder text like [Your Name] or [Contact Information]."
+                f"""Write a short, professional plain-text reorder email using only the facts below.
+Do not add any placeholder text such as [Your Name], [Title], or [Phone Number].
+Sign off exactly as: "Portland Optics Operations\n— Sent automatically by ChainAgent"
+
+Facts:
+- Product: {sku['name']} (SKU: {sku['id']})
+- Supplier: {effective_supplier}
+- Current stock: {sku['stock']} units
+- Sales rate: {sku['velocity_per_day']} units/day
+- Stock runway: {days:.0f} days remaining
+- Lead time on file: {sku['lead_time_days']} days
+- Units needed: {reorder_qty}
+
+Ask the supplier to confirm availability and earliest ship date. Under 100 words. Plain text only."""
             ))
             emit("EMAIL", email)
             emit("REORDER", json.dumps({
@@ -195,7 +208,7 @@ def run_agent(emit):
                 "variant_id": sku.get("variant_id"),
                 "name": sku["name"],
                 "qty": reorder_qty,
-                "supplier": sku["supplier_name"],
+                "supplier": effective_supplier,
                 "lead_time_days": sku["lead_time_days"],
             }))
             trigger_voice(sku, days)

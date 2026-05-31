@@ -846,19 +846,22 @@ function SettingsSection() {
 }
 
 // ── AGENT SECTION ──
-function AgentSection({brand,supplierEmail,supplierName,agentRunning,trace,showEmail,emailResult,showReply,cdVal,emailContent,onRun,onReset,onApprove,onCancel}:{
-  brand:Brand,supplierEmail:string,supplierName:string,agentRunning:boolean,trace:TraceLine[],showEmail:boolean,emailResult:string,showReply:boolean,cdVal:string,emailContent:string,
+function AgentSection({brand,supplierEmail,supplierName,reorderQty,agentRunning,trace,showEmail,emailResult,showReply,cdVal,emailContent,onRun,onReset,onApprove,onCancel}:{
+  brand:Brand,supplierEmail:string,supplierName:string,reorderQty:number,agentRunning:boolean,trace:TraceLine[],showEmail:boolean,emailResult:string,showReply:boolean,cdVal:string,emailContent:string,
   onRun:()=>void,onReset:()=>void,onApprove:()=>void,onCancel:()=>void
 }) {
   const traceRef = useRef<HTMLDivElement>(null)
-  const [isEditing, setIsEditing] = useState(false)
-  const [editedEmail, setEditedEmail] = useState("")
+  const [editing, setEditing] = useState(false)
+  const [draft,   setDraft]   = useState("")
 
   useEffect(()=>{if(traceRef.current)traceRef.current.scrollTop=traceRef.current.scrollHeight},[trace])
-  useEffect(()=>{ setIsEditing(false); setEditedEmail(emailContent) },[emailContent])
+  // Seed draft from agent output; never fall back to a pre-written template
+  useEffect(()=>{ if(emailContent){ setDraft(emailContent); setEditing(false) } },[emailContent])
 
-  const displayEmail = editedEmail || emailContent
   const tagStyle = (tag:string) => TAG_COLORS[tag]||TAG_COLORS.WATCH
+  const critSku  = brand.skus.find(s=>s.risk==="Critical")||brand.skus[0]
+  const subject  = `Reorder Request — ${critSku?.name||brand.name} · ${reorderQty} units`
+
   return (
     <>
       <SectionHeader eyebrow="// autonomous agent" title="Agent Control Center" hook="← /api/stream (SSE)"
@@ -892,36 +895,38 @@ function AgentSection({brand,supplierEmail,supplierName,agentRunning,trace,showE
       </div>
       {showEmail&&(
         <div className="email-panel" style={{background:"var(--surface)",border:"1px solid var(--border)",borderLeft:"3px solid var(--accent)",borderRadius:14,overflow:"hidden"}}>
-          <PanelHeader title={<>📧 Drafted Supplier Email</>}/>
+          <PanelHeader title={<>📧 AI-Drafted Supplier Email <BeHook>← gemini</BeHook></>}/>
           <div style={{padding:"12px 18px",borderBottom:"1px solid var(--border)"}}>
             <div style={{display:"flex",gap:10,...S.mono,fontSize:12,padding:"4px 0"}}>
               <span style={{color:"var(--muted)",minWidth:55}}>To:</span>
               {supplierEmail
-                ? <span>{supplierEmail} <span style={{color:"var(--muted)"}}> · {supplierName}</span></span>
+                ? <span>{supplierEmail}<span style={{color:"var(--muted)"}}> · {supplierName}</span></span>
                 : <span style={{color:"var(--amber)"}}>⚠ No email on file — add contact in Suppliers tab</span>}
             </div>
-            <div style={{display:"flex",gap:10,...S.mono,fontSize:12,padding:"4px 0"}}><span style={{color:"var(--muted)",minWidth:55}}>Subject:</span><span>Urgent Reorder — {brand.skus[0]?.name||""} · {brand.skus[0]?.vel||""}</span></div>
+            <div style={{display:"flex",gap:10,...S.mono,fontSize:12,padding:"4px 0"}}>
+              <span style={{color:"var(--muted)",minWidth:55}}>Subject:</span>
+              <span>{subject}</span>
+            </div>
           </div>
           <div style={{padding:"12px 18px",borderBottom:"1px solid var(--border)"}}>
-            {isEditing ? (
+            {editing?(
               <textarea
-                value={editedEmail}
-                onChange={e => setEditedEmail(e.target.value)}
-                style={{...S.mono,fontSize:11,lineHeight:1.9,color:"var(--text)",background:"var(--surface2)",borderRadius:8,padding:"12px 14px",width:"100%",minHeight:220,border:"1px solid var(--accent-mid)",outline:"none",resize:"vertical"}}
+                value={draft}
+                onChange={e=>setDraft(e.target.value)}
+                style={{...S.mono,fontSize:11,lineHeight:1.9,color:"var(--text)",background:"var(--surface2)",borderRadius:8,padding:"12px 14px",width:"100%",minHeight:180,border:"1px solid var(--accent-mid)",outline:"none",resize:"vertical" as const,boxSizing:"border-box" as const}}
               />
-            ) : (
-              <div style={{...S.mono,fontSize:11,lineHeight:1.9,color:"var(--text)",background:"var(--surface2)",borderRadius:8,padding:"12px 14px",whiteSpace:"pre-wrap"}}>
-                {displayEmail || "Waiting for agent to draft email…"}
+            ):(
+              <div style={{...S.mono,fontSize:11,lineHeight:1.9,color:draft?"var(--text)":"var(--muted)",background:"var(--surface2)",borderRadius:8,padding:"12px 14px",whiteSpace:"pre-wrap" as const,minHeight:60}}>
+                {draft || "Generating email draft from live Shopify data…"}
               </div>
             )}
           </div>
           {!emailResult?(
             <div style={{padding:"12px 18px",display:"flex",alignItems:"center",gap:9,flexWrap:"wrap" as const}}>
               <Btn variant="primary" style={{padding:"9px 20px"}} onClick={onApprove}>✓ Approve & Send</Btn>
-              {isEditing
-                ? <Btn variant="primary" style={{padding:"9px 18px",background:"var(--surface3)",color:"var(--text)"}} onClick={()=>setIsEditing(false)}>✓ Done</Btn>
-                : <Btn style={{padding:"9px 18px"}} onClick={()=>setIsEditing(true)}>✏ Edit</Btn>
-              }
+              <Btn style={{padding:"9px 18px"}} onClick={()=>setEditing(e=>!e)}>
+                {editing?"✓ Save edit":"✏ Edit"}
+              </Btn>
               <button onClick={onCancel} style={{background:"none",color:"var(--muted)",border:"none",...S.mono,fontSize:12,cursor:"pointer",padding:9}}>Cancel</button>
               <div style={{marginLeft:"auto",...S.mono,fontSize:11,color:"var(--amber)"}}>⏱ auto-sending in {cdVal}</div>
             </div>
@@ -931,7 +936,10 @@ function AgentSection({brand,supplierEmail,supplierName,agentRunning,trace,showE
           {showReply&&(
             <div className="supplier-reply" style={{background:"var(--surface2)",border:"1px solid rgba(34,197,94,0.2)",borderLeft:"3px solid #4ade80",borderRadius:10,padding:"12px 16px",margin:"0 18px 12px"}}>
               <div style={{...S.mono,fontSize:10,color:"#4ade80",marginBottom:6}}>✉ Supplier Reply · just now</div>
-              <div style={{...S.mono,fontSize:11,color:"var(--text)",lineHeight:1.7}}>Hi, confirmed — <strong>800 units</strong> available. Ships Monday. ETA 7 business days. Invoice to follow.<br/><br/>— {supplierName||brand.supplier}</div>
+              <div style={{...S.mono,fontSize:11,color:"var(--text)",lineHeight:1.7}}>
+                Hi, confirmed — <strong>{reorderQty} units</strong> available. Ships Monday. ETA 7 business days. Invoice to follow.
+                <br/><br/>— {supplierName||brand.supplier}
+              </div>
             </div>
           )}
         </div>
@@ -1044,6 +1052,13 @@ export default function Dashboard() {
   ) ?? suppliers[0] ?? null
   const agentSupplierEmail = agentSupplier?.email || ""
   const agentSupplierName  = agentSupplier?.name  || brand?.supplier || ""
+  const agentCritSku  = Array.isArray(liveSkus) ? (
+    liveSkus.find(s => {
+      const mapped = brand?.skus.find(b=>b.risk==="Critical")
+      return s.id===mapped?.id || s.name===mapped?.name
+    }) ?? liveSkus[0]
+  ) : null
+  const agentReorderQty = agentCritSku?.reorder_qty ?? 500
 
   // Sync timer
   useEffect(()=>{
@@ -1303,7 +1318,7 @@ export default function Dashboard() {
                     </div>
                     <Btn variant="primary" onClick={()=>setSection("suppliers")}>Go to Suppliers →</Btn>
                   </div>
-                ):<AgentSection brand={brand} supplierEmail={agentSupplierEmail} supplierName={agentSupplierName} agentRunning={agentRunning} trace={stream.trace} showEmail={showEmail} emailResult={emailResult} showReply={showReply} cdVal={fmt(cdSecs)} onRun={handleRunAgent} onReset={handleReset} onApprove={handleApprove} onCancel={handleCancel} emailContent={stream.emailContent}/>)}
+                ):<AgentSection brand={brand} supplierEmail={agentSupplierEmail} supplierName={agentSupplierName} reorderQty={agentReorderQty} agentRunning={agentRunning} trace={stream.trace} showEmail={showEmail} emailResult={emailResult} showReply={showReply} cdVal={fmt(cdSecs)} onRun={handleRunAgent} onReset={handleReset} onApprove={handleApprove} onCancel={handleCancel} emailContent={stream.emailContent}/>)}
                 {section==="inventory" &&<InventorySection brand={brand}/>}
                 {section==="inbounds"  &&<InboundsSection reorders={pendingReorders} onReceive={r => { removeReorder(r.id); handleResync() }}/>}
                 {section==="orders"    &&<OrdersSection orders={shopifyOrders}/>}
