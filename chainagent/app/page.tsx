@@ -12,17 +12,17 @@ type TerminalLine =
 
 // ── TERMINAL DATA ──────────────────────────────────────────────────────────
 const LINES: TerminalLine[] = [
-  { delay: 400,  type: 'line', time: '09:14:02', tag: 'WATCH', tagClass: 'tag-watch', msg: 'Polling inventory · <span class="hi">3 SKUs</span> · brand: Lense' },
-  { delay: 900,  type: 'line', time: '09:14:03', tag: 'WATCH', tagClass: 'tag-watch', msg: 'Lense 5to9 · stock: 1592 · velocity: 47/day · days_left: <span class="hi">34</span> ✓' },
-  { delay: 1300, type: 'line', time: '09:14:03', tag: 'WATCH', tagClass: 'tag-watch', msg: 'Lense Drop 001 · stock: <span class="warn">428</span> · velocity: 48/day · days_left: <span class="danger">8.9</span> ⚠' },
+  { delay: 400,  type: 'line', time: '09:14:02', tag: 'WATCH', tagClass: 'tag-watch', msg: 'Polling inventory · <span class="hi">3 SKUs</span> · brand: Portland Optics' },
+  { delay: 900,  type: 'line', time: '09:14:03', tag: 'WATCH', tagClass: 'tag-watch', msg: 'Portland Classic Frame · stock: 1592 · velocity: 47/day · days_left: <span class="hi">34</span> ✓' },
+  { delay: 1300, type: 'line', time: '09:14:03', tag: 'WATCH', tagClass: 'tag-watch', msg: 'Portland Aviator Pro · stock: <span class="warn">428</span> · velocity: 48/day · days_left: <span class="danger">8.9</span> ⚠' },
   { delay: 1700, type: 'divider' },
-  { delay: 2000, type: 'line', time: '09:14:04', tag: 'RISK',  tagClass: 'tag-risk',  msg: 'Threshold breach · Lense Drop 001 · lead_time: <span class="warn">21 days</span> · coverage: <span class="danger">8.9 days</span>' },
+  { delay: 2000, type: 'line', time: '09:14:04', tag: 'RISK',  tagClass: 'tag-risk',  msg: 'Threshold breach · Portland Aviator Pro · lead_time: <span class="warn">21 days</span> · coverage: <span class="danger">8.9 days</span>' },
   { delay: 2400, type: 'line', time: '09:14:04', tag: 'THINK', tagClass: 'tag-think', msg: 'Invoking Gemini · reasoning over stockout risk...' },
   { delay: 2900, type: 'line', time: '09:14:05', tag: 'THINK', tagClass: 'tag-think', msg: '<span class="dim">›</span> velocity trend: +12% WoW · <span class="dim">ad spend:</span> Meta campaign active' },
   { delay: 3300, type: 'line', time: '09:14:05', tag: 'THINK', tagClass: 'tag-think', msg: '<span class="dim">›</span> reorder qty calc: 48/day × 30 day buffer + 21 day lead = <span class="hi">800 units</span>' },
   { delay: 3700, type: 'line', time: '09:14:06', tag: 'THINK', tagClass: 'tag-think', msg: '<span class="dim">›</span> COGS: $12.50 · total order value: <span class="warn">$10,000</span> · recommendation: reorder now' },
   { delay: 4200, type: 'divider' },
-  { delay: 4500, type: 'line', time: '09:14:07', tag: 'ACT',   tagClass: 'tag-act',   msg: 'Drafting supplier email · supplier: Guangzhou Lense Optics Co.' },
+  { delay: 4500, type: 'line', time: '09:14:07', tag: 'ACT',   tagClass: 'tag-act',   msg: 'Drafting supplier email · supplier: Guangzhou Optics Co.' },
   { delay: 5000, type: 'email' },
   { delay: 5500, type: 'line', time: '09:14:09', tag: 'ALERT', tagClass: 'tag-alert', msg: 'ElevenLabs · playing voice alert to founder...' },
   { delay: 5900, type: 'line', time: '09:14:09', tag: 'ACT',   tagClass: 'tag-act',   msg: 'Action queued · auto-sends in <span class="warn">01:59:51</span> unless cancelled' },
@@ -63,7 +63,7 @@ function Terminal() {
     <div className="terminal">
       <div className="terminal-header">
         <span className="t-dot t-red" /><span className="t-dot t-yellow" /><span className="t-dot t-green" />
-        <span className="t-title">chainagent-runtime · brand: Lense · 3 SKUs monitored</span>
+        <span className="t-title">chainagent-runtime · brand: Portland Optics · 3 SKUs monitored</span>
         <span className="t-status">agent running</span>
       </div>
       <div className="terminal-body" ref={bodyRef}>
@@ -71,13 +71,13 @@ function Terminal() {
           if (item.type === 'divider') return <div key={i} className="t-divider visible" />;
           if (item.type === 'email') return (
             <div key={i} className="t-email-box visible">
-              <div className="email-to">To: <span>guangzhou-lense@supplier.cn</span></div>
-              <div className="email-to">Subject: <span>Urgent Reorder — Lense Drop 001 · 800 units</span></div>
+              <div className="email-to">To: <span>guangzhou@supplier.cn</span></div>
+              <div className="email-to">Subject: <span>Urgent Reorder — Portland Aviator Pro · 800 units</span></div>
               <div className="email-body">
                 Hi Wei,<br /><br />
-                We need to place an urgent reorder for <span className="em">800 units</span> of Lense Drop 001 (SKU: DHOD5-EC999009).<br />
+                We need to place an urgent reorder for <span className="em">800 units</span> of Portland Aviator Pro (SKU: DHOD5-EC999009).<br />
                 Current stock covers <span className="em">~9 days</span>. Please confirm availability and earliest ship date.<br /><br />
-                <span className="dim">— Sent by ChainAgent on behalf of Lense</span>
+                <span className="dim">— Sent by ChainAgent on behalf of Portland Optics</span>
               </div>
             </div>
           );
@@ -349,20 +349,20 @@ export default function Home() {
             ))}
           </div>
           <div className="sku-row">
-            <div className="sku-name">Lense 5to9<span className="sku-id">DHOD5-EC999002</span></div>
+            <div className="sku-name">Portland Classic Frame<span className="sku-id">DHOD5-EC999002</span></div>
             <div className="sku-cell">1,592</div><div className="sku-cell">47</div><div className="sku-cell">34</div>
             <div className="sku-cell"><span className="risk-pill risk-ok">Healthy</span></div>
             <div className="sku-cell muted">—</div>
           </div>
           <div className="sku-row critical">
-            <div className="sku-name">Lense Drop 001<span className="sku-id">DHOD5-EC999009</span></div>
+            <div className="sku-name">Portland Aviator Pro<span className="sku-id">DHOD5-EC999009</span></div>
             <div className="sku-cell">428</div><div className="sku-cell">48</div>
             <div className="sku-cell" style={{ color: '#f87171', fontWeight: 500 }}>8.9</div>
             <div className="sku-cell"><span className="risk-pill risk-danger">Critical</span></div>
             <div className="agent-tag">Acting now</div>
           </div>
           <div className="sku-row">
-            <div className="sku-name">Lense Drop 001 Yellow<span className="sku-id">DHOD5-EC999003</span></div>
+            <div className="sku-name">Portland Aviator Pro Amber<span className="sku-id">DHOD5-EC999003</span></div>
             <div className="sku-cell">1,594</div><div className="sku-cell">31</div>
             <div className="sku-cell" style={{ color: 'var(--warn)' }}>21</div>
             <div className="sku-cell"><span className="risk-pill risk-warn">Watch</span></div>

@@ -14,63 +14,37 @@ interface Brand {
   supplier: string; email: string; skus: SKU[]
 }
 interface RawSKU {
-  name: string; stock: number; velocity_per_day: number
+  id?: string; name: string; stock: number; velocity_per_day: number
   lead_time_days: number; supplier_name: string; reorder_qty: number
 }
 interface AuditRow { time: string; action: string; sku: string; label: string }
+interface Supplier {
+  id: string; name: string; contact: string; email: string; phone: string
+  location: string; leadTime: string; moq: number; terms: string; rating: number
+  active: boolean; skus: number; since: string; tags: string[]; notes: string
+  onTimeRate: number; totalOrders: number; lastOrder: string
+}
+interface Invoice {
+  ref: string; supplier: string; supplierEmail: string; desc: string
+  amount: string; amountRaw: number; due: string
+  status: "due-soon" | "upcoming" | "paid"; payable: boolean; paid: boolean
+}
+interface DeliveryCountry { flag: string; name: string; days: string; pct: number; orders: string }
 
 // ── BRAND DATA ──
 const BRANDS: Record<string, Brand> = {
-  focal: {
-    name:"Focal Eyewear", label:"brand: Focal", days:"8.9", stock:"3,614",
-    incoming:"800", crit:"FOCAL ARC FRAME",
-    agentTitle:"chainagent-runtime · brand: Focal · 3 SKUs monitored",
-    supplier:"Guangzhou Focal Optics Co.", email:"wei@guangzhou-focal.cn",
+  portland: {
+    name:"Portland Optics", label:"brand: Portland Optics", days:"8.9", stock:"3,614",
+    incoming:"800", crit:"PORTLAND AVIATOR PRO",
+    agentTitle:"chainagent-runtime · brand: Portland Optics · 3 SKUs monitored",
+    supplier:"Guangzhou Optics Co.", email:"wei@guangzhou-optics.cn",
     skus:[
-      {name:"Focal Slim 01",  id:"FOCL-EC999001",stock:"1,592",inc:"+300",   vel:"47/day",days:"33.9",pct:85, risk:"Healthy", rc:"risk-ok"},
-      {name:"Focal Arc Frame",id:"FOCL-EC999002",stock:"428",  inc:"+800 ↑", vel:"48/day",days:"8.9", pct:15, risk:"Critical",rc:"risk-critical"},
-      {name:"Focal Round 03", id:"FOCL-EC999003",stock:"1,594",inc:"—",      vel:"31/day",days:"21.0",pct:42, risk:"Watch",   rc:"risk-watch"},
-    ]
-  },
-  lens: {
-    name:"LensLab Co.", label:"brand: LensLab", days:"14.2", stock:"2,210",
-    incoming:"200", crit:"LENSLAB PRO 02",
-    agentTitle:"chainagent-runtime · brand: LensLab · 2 SKUs monitored",
-    supplier:"Shenzhen LensLab Factory", email:"ops@shenzhen-lenslab.cn",
-    skus:[
-      {name:"LensLab Classic",id:"LENS-EC001",stock:"980",inc:"—",    vel:"32/day",days:"30.6",pct:76,risk:"Healthy",rc:"risk-ok"},
-      {name:"LensLab Pro 02", id:"LENS-EC002",stock:"455",inc:"+200", vel:"32/day",days:"14.2",pct:35,risk:"Watch",  rc:"risk-watch"},
-    ]
-  },
-  arc: {
-    name:"Arc Vision", label:"brand: Arc", days:"6.1", stock:"5,040",
-    incoming:"500", crit:"ARC TITAN FRAME",
-    agentTitle:"chainagent-runtime · brand: Arc Vision · 4 SKUs monitored",
-    supplier:"Guangzhou Arc Optics Ltd.", email:"wei@arc-optics.cn",
-    skus:[
-      {name:"Arc Titan Frame",id:"ARC-EC001",stock:"290",  inc:"+500 ↑",vel:"47/day",days:"6.1", pct:12, risk:"Critical",rc:"risk-critical"},
-      {name:"Arc Slim Sport", id:"ARC-EC002",stock:"2,100",inc:"—",     vel:"40/day",days:"52.5",pct:100,risk:"Healthy", rc:"risk-ok"},
-      {name:"Arc Classic RX", id:"ARC-EC003",stock:"1,850",inc:"—",     vel:"28/day",days:"66.1",pct:100,risk:"Healthy", rc:"risk-ok"},
-      {name:"Arc Lite Frame", id:"ARC-EC004",stock:"800",  inc:"+300",  vel:"38/day",days:"21.0",pct:42, risk:"Watch",   rc:"risk-watch"},
+      {name:"Portland Classic Frame",  id:"DHOD5-EC999002",stock:"1,592",inc:"+300",   vel:"47/day",days:"33.9",pct:85, risk:"Healthy", rc:"risk-ok"},
+      {name:"Portland Aviator Pro",id:"DHOD5-EC999009",stock:"428",  inc:"+800 ↑", vel:"48/day",days:"8.9", pct:15, risk:"Critical",rc:"risk-critical"},
+      {name:"Portland Aviator Pro Amber", id:"DHOD5-EC999003",stock:"1,594",inc:"—",      vel:"31/day",days:"21.0",pct:42, risk:"Watch",   rc:"risk-watch"},
     ]
   }
 }
-
-const TRACE_SCRIPT = [
-  {tag:"WATCH",msg:"Polling inventory · 3 SKUs · brand: Focal",d:400},
-  {tag:"WATCH",msg:"Focal Slim 01 · stock: 1592 · incoming: +300 · days_left: 33.9 ✓",d:900},
-  {tag:"WATCH",msg:"Focal Arc Frame · stock: 428 · incoming: +800 · days_left: 8.9 ⚠",d:1300},
-  {tag:"WATCH",msg:"Focal Round 03 · stock: 1594 · days_left: 21.0",d:1700},
-  {tag:"RISK", msg:"Threshold breach · Focal Arc Frame · lead_time: 21 days · coverage: 8.9 days",d:2200},
-  {tag:"THINK",msg:"Invoking Claude · reasoning over stockout risk...",d:2700},
-  {tag:"THINK",msg:"› incoming 800u · ETA May 31 · gap: 8.9 days vs 21 day lead — still critical",d:3100},
-  {tag:"THINK",msg:"› velocity +12% WoW · Meta campaign active · recommendation: reorder now",d:3500},
-  {tag:"THINK",msg:"› qty: 48/day × 30 buffer + 21 lead = 800 units · $10,000",d:3900},
-  {tag:"ACT",  msg:"Drafting supplier email · Guangzhou Focal Optics Co.",d:4400},
-  {tag:"ACT",  msg:"Email drafted · queued for approval · auto-sends in 02:00:00",d:5000},
-  {tag:"ALERT",msg:"ElevenLabs · playing voice alert to founder...",d:5500},
-  {tag:"ACT",  msg:"Action logged to Snowflake · inbound cross-referenced",d:6000},
-]
 
 const TAG_COLORS: Record<string,{bg:string,color:string}> = {
   WATCH:{bg:"rgba(74,158,255,0.1)",  color:"#4a9eff"},
@@ -422,57 +396,153 @@ function OrdersSection({brand}:{brand:Brand}) {
   )
 }
 
-function SuppliersSection({brand}:{brand:Brand}) {
+function SuppliersSection({suppliers: initSuppliers, onGoToInbounds}:{suppliers:Supplier[], onGoToInbounds:()=>void}) {
+  const [suppliers, setSuppliers] = useState(initSuppliers)
+  const [expandedId, setExpandedId] = useState<string|null>(null)
+  const [showModal, setShowModal] = useState(false)
+  const [form, setForm] = useState({name:"",contact:"",email:"",location:"",leadTime:"",moq:"",terms:""})
+  const [saved, setSaved] = useState(false)
+
+  useEffect(()=>setSuppliers(initSuppliers),[initSuppliers])
+
+  function addSupplier() {
+    if(!form.name||!form.email) return
+    const s:Supplier = {
+      id:`SUP-${suppliers.length+1}`,name:form.name,contact:form.contact,email:form.email,
+      phone:"",location:form.location,leadTime:form.leadTime||"—",moq:parseInt(form.moq)||0,
+      terms:form.terms||"Net-30",rating:3,active:false,skus:0,since:new Date().getFullYear().toString(),
+      tags:["new"],notes:"",onTimeRate:0,totalOrders:0,lastOrder:"—"
+    }
+    setSuppliers(prev=>[...prev,s])
+    setSaved(true)
+    setTimeout(()=>{setShowModal(false);setSaved(false);setForm({name:"",contact:"",email:"",location:"",leadTime:"",moq:"",terms:""})},700)
+  }
+
   return (
     <>
-      <SectionHeader eyebrow="// suppliers" title="Supplier Network" action={<Btn variant="primary">+ Add Supplier</Btn>}/>
+      <SectionHeader eyebrow="// suppliers" title="Supplier Network"
+        action={<Btn variant="primary" onClick={()=>setShowModal(true)}>+ Add Supplier</Btn>}/>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
-        {[
-          {name:brand.supplier,email:brand.email,active:true},
-          {name:"Shenzhen Optical Partners Ltd.",email:"amy@sz-optical.cn",active:false},
-        ].map((s,i)=>(
-          <div key={i} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:10,padding:"14px 16px"}}>
-            <div style={{fontSize:13,fontWeight:500,color:"var(--text)",marginBottom:4}}>{s.name}</div>
-            <div style={{...S.mono,fontSize:10,color:"var(--muted)",lineHeight:1.7}}>
-              Contact: {s.email}<br/>Location: China · Lead: 21 days<br/>MOQ: 500 · Net-30 · ★★★★{s.active?"★":"☆"}
+        {suppliers.map(s=>(
+          <div key={s.id} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:10,padding:"14px 16px"}}>
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:6}}>
+              <div>
+                <div style={{fontSize:13,fontWeight:500,color:"var(--text)",marginBottom:4}}>{s.name}</div>
+                <div style={{display:"flex",gap:4,flexWrap:"wrap" as const}}>
+                  {s.tags.map(t=>(
+                    <span key={t} style={{...S.mono,fontSize:9,padding:"2px 6px",borderRadius:4,background:"var(--surface3)",color:"var(--muted2)"}}>{t}</span>
+                  ))}
+                </div>
+              </div>
+              <div style={{display:"flex",gap:1,flexShrink:0}}>
+                {[1,2,3,4,5].map(n=><span key={n} style={{fontSize:11,color:n<=s.rating?"var(--amber)":"var(--surface3)"}}>★</span>)}
+              </div>
             </div>
-            <div style={{...S.mono,fontSize:10,color:s.active?"var(--accent)":"var(--muted)",marginTop:6,display:"flex",alignItems:"center",gap:4}}>
+            <div style={{...S.mono,fontSize:10,color:"var(--muted)",lineHeight:1.9,marginBottom:6}}>
+              Contact: {s.contact} · {s.email}<br/>
+              Location: {s.location} · Lead: {s.leadTime}<br/>
+              MOQ: {s.moq.toLocaleString()} · {s.terms}
+            </div>
+            <div style={{...S.mono,fontSize:10,color:s.active?"var(--accent)":"var(--muted)",marginBottom:8,display:"flex",alignItems:"center",gap:4}}>
               <span style={{width:6,height:6,borderRadius:"50%",background:s.active?"var(--accent)":"var(--muted)",display:"inline-block"}}/>
-              {s.active?"Active · 3 SKUs":"Backup supplier"}
+              {s.active?`Active · ${s.skus} SKUs`:"Inactive"} · Since {s.since}
             </div>
-            <div style={{display:"flex",gap:7,marginTop:10}}>
-              <Btn style={{fontSize:10,padding:"5px 10px"}}>📧 Email</Btn>
-              <Btn style={{fontSize:10,padding:"5px 10px"}}>◉ Profile</Btn>
-              <Btn variant="primary" style={{fontSize:10,padding:"5px 10px"}}>+ Inbound</Btn>
+            {expandedId===s.id&&(
+              <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:8,padding:"10px 12px",marginBottom:10,...S.mono,fontSize:10,color:"var(--muted2)",lineHeight:1.9}}>
+                {s.phone&&<div>Phone: {s.phone}</div>}
+                <div>On-time rate: <span style={{color:"var(--accent)"}}>{s.onTimeRate}%</span> · Total orders: {s.totalOrders}</div>
+                <div>Last order: {s.lastOrder}</div>
+                {s.notes&&<div style={{color:"var(--muted)",marginTop:4,fontStyle:"italic"}}>{s.notes}</div>}
+              </div>
+            )}
+            <div style={{display:"flex",gap:7}}>
+              <Btn style={{fontSize:10,padding:"5px 10px"}} onClick={()=>window.open(`mailto:${s.email}?subject=Re: Portland Optics Supply Inquiry`)}>📧 Email</Btn>
+              <Btn style={{fontSize:10,padding:"5px 10px"}} onClick={()=>setExpandedId(expandedId===s.id?null:s.id)}>
+                {expandedId===s.id?"✕ Close":"◉ Profile"}
+              </Btn>
+              <Btn variant="primary" style={{fontSize:10,padding:"5px 10px"}} onClick={onGoToInbounds}>+ Inbound</Btn>
             </div>
           </div>
         ))}
       </div>
+
+      {showModal&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.72)",backdropFilter:"blur(4px)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setShowModal(false)}>
+          <div style={{background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:14,padding:24,width:420,maxWidth:"90vw"}} onClick={e=>e.stopPropagation()}>
+            <div style={{...S.display,fontSize:16,fontWeight:700,marginBottom:3}}>Add Supplier</div>
+            <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginBottom:18}}>New supplier saved to session.</div>
+            {([
+              {key:"name",    label:"Company Name *", placeholder:"e.g. Osaka Lens Works"},
+              {key:"contact", label:"Contact Name",   placeholder:"e.g. Kenji Tanaka"},
+              {key:"email",   label:"Email *",        placeholder:"kenji@osaka-lens.jp"},
+              {key:"location",label:"Location",       placeholder:"e.g. Osaka, Japan"},
+              {key:"leadTime",label:"Lead Time",      placeholder:"e.g. 25 days"},
+              {key:"moq",     label:"MOQ",            placeholder:"e.g. 500"},
+              {key:"terms",   label:"Payment Terms",  placeholder:"e.g. Net-30"},
+            ] as {key:string,label:string,placeholder:string}[]).map(({key,label,placeholder})=>(
+              <div key={key} style={{marginBottom:11}}>
+                <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginBottom:4}}>{label}</div>
+                <input value={form[key as keyof typeof form]} onChange={e=>setForm(f=>({...f,[key]:e.target.value}))} placeholder={placeholder}
+                  style={{...S.mono,fontSize:11,background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:6,padding:"7px 11px",color:"var(--text)",outline:"none",width:"100%"}}/>
+              </div>
+            ))}
+            <div style={{display:"flex",gap:9,marginTop:4}}>
+              <Btn variant={saved?"ghost":"primary"} onClick={addSupplier} style={{flex:1,justifyContent:"center"}}>
+                {saved?"Saved ✓":"Save Supplier"}
+              </Btn>
+              <Btn onClick={()=>setShowModal(false)} style={{flex:1,justifyContent:"center"}}>Cancel</Btn>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
 
-function InvoicesSection({brand}:{brand:Brand}) {
-  const [paid, setPaid] = useState(false)
+function InvoicesSection({invoices: initInvoices}:{invoices:Invoice[]}) {
+  const [invoices, setInvoices] = useState(initInvoices)
+  const [scheduled, setScheduled] = useState<Set<string>>(new Set())
+
+  useEffect(()=>setInvoices(initInvoices),[initInvoices])
+
+  function payInvoice(ref:string) {
+    setInvoices(prev=>prev.map(inv=>inv.ref===ref?{...inv,paid:true,status:"paid" as const}:inv))
+  }
+  function scheduleInvoice(ref:string) {
+    setScheduled(prev=>new Set([...prev,ref]))
+  }
+
+  const dueColor = (inv:Invoice) => inv.paid?"var(--muted)":inv.status==="due-soon"?"var(--red)":"var(--amber)"
+  const statusLabel = (inv:Invoice) => inv.paid?"Paid":inv.status==="due-soon"?"Due Soon":scheduled.has(inv.ref)?"Scheduled":"Upcoming"
+  const statusType  = (inv:Invoice):React.ComponentProps<typeof StatusPill>["type"] =>
+    inv.paid?"live":inv.status==="due-soon"?"pending":scheduled.has(inv.ref)?"pending":"draft"
+
+  const outstanding = invoices.filter(inv=>!inv.paid).reduce((s,inv)=>s+inv.amountRaw,0)
+
   return (
     <>
       <SectionHeader eyebrow="// invoice payments" title="Invoice Payments" hook="← /api/invoices"
-        action={<div style={{...S.mono,fontSize:12,color:"var(--muted)"}}>Total due: <span style={{color:"var(--amber)",fontWeight:500}}>$13,000</span></div>}/>
+        action={<div style={{...S.mono,fontSize:12,color:"var(--muted)"}}>Outstanding: <span style={{color:"var(--amber)",fontWeight:500}}>${outstanding.toLocaleString()}</span></div>}/>
       <Panel>
-        <RowHead cols="1fr 100px 100px 100px 100px"><Th>Invoice</Th><Th>Amount</Th><Th>Due Date</Th><Th>Status</Th><Th>Action</Th></RowHead>
-        {[
-          {ref:"INV-2026-041",supplier:brand.supplier,desc:`${brand.skus[1]?.name||""} reorder · 800 units`,amount:"$10,000",due:"Jun 3, 2026",dueColor:"var(--red)",payable:true},
-          {ref:"INV-2026-038",supplier:"Shenzhen Optical",desc:"Round 03 materials",amount:"$3,000",due:"Jun 10, 2026",dueColor:"var(--muted)",payable:false},
-          {ref:"INV-2026-034",supplier:brand.supplier,desc:`${brand.skus[0]?.name||""} restock`,amount:"$6,250",due:"May 14, 2026",dueColor:"var(--muted)",payable:false,paid:true},
-        ].map((inv,i)=>(
-          <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 100px 100px 100px 100px",gap:10,padding:"13px 18px",borderBottom:i<2?"1px solid var(--border)":"none",alignItems:"center",opacity:inv.paid?0.6:1}}>
-            <div><div style={{fontSize:12,fontWeight:500,color:"var(--text)"}}>{inv.ref} · {inv.supplier}</div><div style={{...S.mono,fontSize:9,color:"var(--muted)"}}>{inv.desc}</div></div>
+        <RowHead cols="1fr 100px 110px 110px 110px"><Th>Invoice</Th><Th>Amount</Th><Th>Due Date</Th><Th>Status</Th><Th>Action</Th></RowHead>
+        {invoices.map((inv,i)=>(
+          <div key={inv.ref} style={{display:"grid",gridTemplateColumns:"1fr 100px 110px 110px 110px",gap:10,padding:"13px 18px",borderBottom:i<invoices.length-1?"1px solid var(--border)":"none",alignItems:"center",opacity:inv.paid?0.55:1}}>
+            <div>
+              <div style={{fontSize:12,fontWeight:500,color:"var(--text)"}}>{inv.ref} · {inv.supplier}</div>
+              <div style={{...S.mono,fontSize:9,color:"var(--muted)"}}>{inv.desc}</div>
+            </div>
             <div style={{...S.mono,fontSize:13,fontWeight:500,color:inv.paid?"var(--muted)":"var(--text)"}}>{inv.amount}</div>
-            <div style={{...S.mono,fontSize:11,color:inv.dueColor}}>{inv.due}</div>
-            <StatusPill label={inv.paid?"Paid":inv.payable?"Due Soon":"Upcoming"} type={inv.paid?"live":inv.payable?"pending":"draft"}/>
-            {inv.payable?<Btn variant="primary" style={{fontSize:11,padding:"6px 14px"}} onClick={()=>setPaid(true)}>{paid?"Paid ✓":"Pay Now"}</Btn>
-             :inv.paid?<Btn style={{fontSize:11,padding:"6px 14px",cursor:"default",opacity:0.5}}>Paid</Btn>
-             :<Btn style={{fontSize:11,padding:"6px 14px"}}>Schedule</Btn>}
+            <div style={{...S.mono,fontSize:11,color:dueColor(inv)}}>{inv.due}</div>
+            <StatusPill label={statusLabel(inv)} type={statusType(inv)}/>
+            {inv.paid?(
+              <Btn style={{fontSize:11,padding:"6px 14px",cursor:"default",opacity:0.5}}>Receipt</Btn>
+            ):inv.status==="due-soon"&&!scheduled.has(inv.ref)?(
+              <Btn variant="primary" style={{fontSize:11,padding:"6px 14px"}} onClick={()=>payInvoice(inv.ref)}>Pay Now</Btn>
+            ):scheduled.has(inv.ref)?(
+              <Btn style={{fontSize:11,padding:"6px 14px",cursor:"default",opacity:0.7}}>Scheduled ✓</Btn>
+            ):(
+              <Btn style={{fontSize:11,padding:"6px 14px"}} onClick={()=>scheduleInvoice(inv.ref)}>Schedule</Btn>
+            )}
           </div>
         ))}
       </Panel>
@@ -480,20 +550,33 @@ function InvoicesSection({brand}:{brand:Brand}) {
   )
 }
 
-function DeliverySection() {
-  const countries = [
-    {flag:"🇺🇸",name:"United States",days:"4.2",pct:98,orders:"2,841"},
-    {flag:"🇬🇧",name:"United Kingdom",days:"5.1",pct:96,orders:"1,204"},
-    {flag:"🇦🇺",name:"Australia",days:"6.8",pct:94,orders:"892"},
-    {flag:"🇩🇪",name:"Germany",days:"5.4",pct:97,orders:"743"},
-    {flag:"🇨🇦",name:"Canada",days:"5.0",pct:95,orders:"621"},
-    {flag:"🇳🇱",name:"Netherlands",days:"4.8",pct:99,orders:"418"},
-  ]
+function DeliverySection({countries}:{countries:DeliveryCountry[]}) {
+  function exportCSV() {
+    const header = "Country,Avg Days,On-Time Rate (%),Orders\n"
+    const rows = countries.map(c=>`"${c.name}",${c.days},${c.pct},"${c.orders}"`).join("\n")
+    const blob = new Blob([header+rows],{type:"text/csv"})
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href=url; a.download="delivery-performance.csv"; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const avgDays = countries.length
+    ? (countries.reduce((s,c)=>s+parseFloat(c.days),0)/countries.length).toFixed(1)
+    : "—"
+  const avgOnTime = countries.length
+    ? Math.round(countries.reduce((s,c)=>s+c.pct,0)/countries.length)
+    : 0
+
   return (
     <>
       <SectionHeader eyebrow="// delivery performance" title="Delivery Performance" hook="← /api/delivery"/>
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
-        {[{icon:"🚀",val:"5.8",label:"AVG DELIVERY DAYS"},{icon:"📦",val:"97.2%",label:"ON-TIME RATE"},{icon:"🌍",val:"38",label:"COUNTRIES SERVED"}].map((m,i)=>(
+        {[
+          {icon:"🚀",val:avgDays,   label:"AVG DELIVERY DAYS"},
+          {icon:"📦",val:`${avgOnTime}%`,label:"ON-TIME RATE"},
+          {icon:"🌍",val:"38",      label:"COUNTRIES SERVED"},
+        ].map((m,i)=>(
           <div key={i} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:12,padding:"15px 17px"}}>
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:9}}>
               <div style={{width:30,height:30,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,background:"var(--accent-dim)"}}>{m.icon}</div>
@@ -505,7 +588,7 @@ function DeliverySection() {
         ))}
       </div>
       <Panel>
-        <PanelHeader title="🌍 Delivery by Country" actions={<Btn>↓ Export</Btn>}/>
+        <PanelHeader title="🌍 Delivery by Country" actions={<Btn onClick={exportCSV}>↓ Export CSV</Btn>}/>
         <RowHead cols="1fr 90px 150px 70px"><Th>Country</Th><Th>Avg Days</Th><Th>On-Time Rate</Th><Th>Orders</Th></RowHead>
         {countries.map(c=>(
           <div key={c.name} style={{display:"grid",gridTemplateColumns:"1fr 90px 150px 70px",gap:10,padding:"11px 18px",borderBottom:"1px solid var(--border)",alignItems:"center",fontSize:12}}>
@@ -521,7 +604,7 @@ function DeliverySection() {
           </div>
         ))}
         <div style={{display:"grid",gridTemplateColumns:"1fr 90px 150px 70px",gap:10,padding:"11px 18px",alignItems:"center",fontSize:12,color:"var(--muted)"}}>
-          <div>+ 32 more countries</div>
+          <div>+ 29 more countries</div>
           <div style={{...S.mono,fontSize:11}}>6.2 avg</div>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
             <div style={{flex:1,height:4,background:"var(--surface3)",borderRadius:2}}><div style={{width:"92%",height:"100%",background:"var(--muted)",borderRadius:2}}/></div>
@@ -535,9 +618,18 @@ function DeliverySection() {
 }
 
 function LogsSection({auditRows}:{auditRows:AuditRow[]}) {
+  function exportCSV() {
+    const header = "Time,Action,SKU,Status\n"
+    const rows = auditRows.map(r=>`"${r.time}","${r.action}","${r.sku}","${r.label}"`).join("\n")
+    const blob = new Blob([header+rows],{type:"text/csv"})
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href=url; a.download="audit-log.csv"; a.click()
+    URL.revokeObjectURL(url)
+  }
   return (
     <>
-      <SectionHeader eyebrow="// audit log" title="Audit Log" hook="← snowflake_log.py" action={<Btn>↓ Export CSV</Btn>}/>
+      <SectionHeader eyebrow="// audit log" title="Audit Log" hook="← snowflake_log.py" action={<Btn onClick={exportCSV}>↓ Export CSV</Btn>}/>
       <Panel>
         <RowHead cols="100px 1fr 90px 80px"><Th>Time</Th><Th>Action</Th><Th>SKU</Th><Th>Status</Th></RowHead>
         {auditRows.map((r,i)=>(
@@ -555,10 +647,10 @@ function LogsSection({auditRows}:{auditRows:AuditRow[]}) {
 
 function NotificationsSection() {
   const channels = [
-    {icon:"💬",bg:"#4A154B",name:"Slack",sub:"Connected · #chainagent-alerts",on:true,preview:"🚨 ChainAgent: Focal Arc Frame 8.9 days stock. Lead 21 days. Reorder drafted 800 units. Approve →"},
-    {icon:"📧",bg:"#EA4335",name:"Email",sub:"founder@focal.com",on:true,preview:"[ChainAgent] Action Required — Focal Arc Frame stockout in 8.9 days. Reorder awaiting approval."},
-    {icon:"📱",bg:"#25D366",name:"SMS / WhatsApp",sub:"via Twilio API",on:false,preview:"ChainAgent: ⚠ Focal Arc Frame — 8.9 days left. Reorder drafted ($10k). Reply YES to approve."},
-    {icon:"🔊",bg:"var(--accent-dim)",name:"Voice Alert",sub:"ElevenLabs · Rachel",on:true,preview:"\"Focal Arc Frame has 8 days of stock. Lead time is 21 days. I've drafted a reorder for 800 units. Awaiting your approval.\""},
+    {icon:"💬",bg:"#4A154B",name:"Slack",sub:"Connected · #chainagent-alerts",on:true,preview:"🚨 ChainAgent: Portland Aviator Pro 8.9 days stock. Lead 21 days. Reorder drafted 800 units. Approve →"},
+    {icon:"📧",bg:"#EA4335",name:"Email",sub:"founder@portlandoptics.com",on:true,preview:"[ChainAgent] Action Required — Portland Aviator Pro stockout in 8.9 days. Reorder awaiting approval."},
+    {icon:"📱",bg:"#25D366",name:"SMS / WhatsApp",sub:"via Twilio API",on:false,preview:"ChainAgent: ⚠ Portland Aviator Pro — 8.9 days left. Reorder drafted ($10k). Reply YES to approve."},
+    {icon:"🔊",bg:"var(--accent-dim)",name:"Voice Alert",sub:"ElevenLabs · Rachel",on:true,preview:"\"Portland Aviator Pro has 8 days of stock. Lead time is 21 days. I've drafted a reorder for 800 units. Awaiting your approval.\""},
   ]
   const [states, setStates] = useState(channels.map(c=>c.on))
   return (
@@ -714,8 +806,7 @@ function AgentSection({brand,agentRunning,trace,showEmail,emailResult,showReply,
 // ── MAIN COMPONENT ──
 export default function Dashboard() {
   const [section, setSection]     = useState("overview")
-  const [brandId, setBrandId]     = useState("focal")
-  const [brandDDOpen, setBrandDD] = useState(false)
+  const [brandId, setBrandId]     = useState("portland")
   const [syncSecs, setSyncSecs]   = useState(0)
   const [syncPhase, setSyncPhase] = useState<"idle"|"syncing"|"done">("idle")
   const [scheduleSecs, setScheduleSecs] = useState(7200)
@@ -723,11 +814,20 @@ export default function Dashboard() {
   const [cdSecs, setCdSecs]       = useState(7200)
   const [liveSkus, setLiveSkus]   = useState<RawSKU[] | null>(null)
   const [auditRows, setAuditRows] = useState<AuditRow[]>([
-    {time:"Today 09:14",action:"Reorder drafted · 800 units · $10,000",sku:"FOCL-EC999002",label:"Pending"},
-    {time:"Yesterday",  action:"Inbound INB-2026-029 created · 400 units",sku:"FOCL-EC999003",label:"Created"},
-    {time:"May 28",     action:"Reorder approved & sent · 500 units",sku:"FOCL-EC999001",label:"Sent"},
-    {time:"May 26",     action:"Discrepancy flagged · 50 unit shortfall",sku:"FOCL-EC999003",label:"Open"},
+    {time:"Today 09:14",  action:"Reorder drafted · Portland Aviator Pro · 800 units · $10,000", sku:"DHOD5-EC999009", label:"Pending"},
+    {time:"Today 08:30",  action:"Agent cycle completed · 3 SKUs evaluated",                     sku:"all",           label:"Created"},
+    {time:"Yesterday",    action:"Inbound INB-2026-029 created · 400 units",                     sku:"DHOD5-EC999003", label:"Created"},
+    {time:"May 29",       action:"Invoice INV-2026-038 scheduled for Jun 10",                    sku:"—",             label:"Pending"},
+    {time:"May 28",       action:"Reorder approved & sent · 500 units",                          sku:"DHOD5-EC999002", label:"Sent"},
+    {time:"May 27",       action:"Stock sync completed · data refreshed from Shopify",           sku:"all",           label:"Created"},
+    {time:"May 26",       action:"Discrepancy flagged · INB-2026-025 · 50 unit shortfall",       sku:"DHOD5-EC999003", label:"Open"},
+    {time:"May 25",       action:"Invoice INV-2026-034 paid · $6,250",                           sku:"—",             label:"Paid"},
+    {time:"May 24",       action:"Reorder cancelled by founder · 200 units",                     sku:"DHOD5-EC999003", label:"Cancelled"},
+    {time:"May 22",       action:"New supplier vetted · Taipei Precision Eyewear",               sku:"—",             label:"Created"},
   ])
+  const [suppliers,  setSuppliers]  = useState<Supplier[]>([])
+  const [invoices,   setInvoices]   = useState<Invoice[]>([])
+  const [deliveries, setDeliveries] = useState<DeliveryCountry[]>([])
   const cdInt = useRef<ReturnType<typeof setInterval>|null>(null)
 
   // ── real backend hook ──
@@ -740,6 +840,13 @@ export default function Dashboard() {
       .then(r=>r.json())
       .then((data: RawSKU[])=>setLiveSkus(data))
       .catch(()=>{}) // fall back to hardcoded BRANDS
+  },[])
+
+  // ── load suppliers / invoices / deliveries ──
+  useEffect(()=>{
+    fetch("/api/suppliers").then(r=>r.json()).then((d:Supplier[])=>setSuppliers(d)).catch(()=>{})
+    fetch("/api/invoices").then(r=>r.json()).then((d:Invoice[])=>setInvoices(d)).catch(()=>{})
+    fetch("/api/deliveries").then(r=>r.json()).then((d:DeliveryCountry[])=>setDeliveries(d)).catch(()=>{})
   },[])
 
   // Build the active brand: prefer live SKU data when loaded
@@ -916,18 +1023,8 @@ export default function Dashboard() {
               Resync
             </button>
           </div>
-          <div style={{position:"relative",display:"flex",alignItems:"center",gap:8,background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:8,padding:"6px 12px",cursor:"pointer",...S.mono,fontSize:11,color:"var(--text)"}} onClick={()=>setBrandDD(!brandDDOpen)}>
-            🏷 {brand.label} <span style={{color:"var(--muted)",fontSize:10}}>▾</span>
-            {brandDDOpen&&(
-              <div style={{position:"absolute",top:"calc(100% + 8px)",right:0,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:10,minWidth:210,zIndex:300,overflow:"hidden",boxShadow:"0 8px 32px rgba(0,0,0,0.5)"}}>
-                {Object.entries(BRANDS).map(([id,b])=>(
-                  <div key={id} onClick={(e)=>{e.stopPropagation();setBrandId(id);setBrandDD(false)}} style={{padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",color:brandId===id?"var(--accent)":"var(--muted2)",cursor:"pointer",transition:"background 0.15s"}} onMouseOver={e=>(e.currentTarget.style.background="var(--surface2)")} onMouseOut={e=>(e.currentTarget.style.background="transparent")}>
-                    {b.name}<span style={{fontSize:9,color:"var(--muted)",background:"var(--surface2)",padding:"2px 6px",borderRadius:100}}>{b.skus.length} SKUs</span>
-                  </div>
-                ))}
-                <div style={{padding:"10px 14px",color:"var(--accent)",cursor:"pointer",borderTop:"1px solid var(--border)"}} onMouseOver={e=>(e.currentTarget.style.background="var(--accent-dim)")} onMouseOut={e=>(e.currentTarget.style.background="transparent")}>+ Add new brand</div>
-              </div>
-            )}
+          <div style={{display:"flex",alignItems:"center",gap:8,background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:8,padding:"6px 12px",...S.mono,fontSize:11,color:"var(--text)"}}>
+            🏷 {brand.label}
           </div>
           <div style={{...S.mono,fontSize:10,color:"var(--muted)",background:"var(--surface2)",padding:"4px 10px",borderRadius:100,border:"1px solid var(--border)",cursor:"pointer"}} onClick={()=>setSection("settings")}>
             Next run: {fmt(scheduleSecs)}
@@ -943,7 +1040,7 @@ export default function Dashboard() {
       </nav>
 
       {/* LAYOUT */}
-      <div style={{display:"grid",gridTemplateColumns:"224px 1fr",minHeight:"100vh",paddingTop:54,position:"relative",zIndex:1}} onClick={()=>brandDDOpen&&setBrandDD(false)}>
+      <div style={{display:"grid",gridTemplateColumns:"224px 1fr",minHeight:"100vh",paddingTop:54,position:"relative",zIndex:1}}>
 
         {/* SIDEBAR */}
         <aside style={{borderRight:"1px solid var(--border)",background:"var(--surface)",padding:"18px 0",position:"sticky",top:54,height:"calc(100vh - 54px)",overflowY:"auto",display:"flex",flexDirection:"column"}}>
@@ -990,9 +1087,9 @@ export default function Dashboard() {
           {section==="inventory"   &&<InventorySection brand={brand}/>}
           {section==="inbounds"    &&<InboundsSection brand={brand}/>}
           {section==="orders"      &&<OrdersSection brand={brand}/>}
-          {section==="suppliers"   &&<SuppliersSection brand={brand}/>}
-          {section==="invoices"    &&<InvoicesSection brand={brand}/>}
-          {section==="delivery"    &&<DeliverySection/>}
+          {section==="suppliers"   &&<SuppliersSection suppliers={suppliers} onGoToInbounds={()=>setSection("inbounds")}/>}
+          {section==="invoices"    &&<InvoicesSection invoices={invoices}/>}
+          {section==="delivery"    &&<DeliverySection countries={deliveries}/>}
           {section==="logs"        &&<LogsSection auditRows={auditRows}/>}
           {section==="notifications"&&<NotificationsSection/>}
           {section==="settings"    &&<SettingsSection/>}
