@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import urllib.request
 from pathlib import Path
 
 from google import genai
@@ -13,19 +14,97 @@ load_dotenv()
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 
+DATA_DIR = Path(__file__).resolve().parents[1] / "data"
+LOCAL_SKUS_PATH   = DATA_DIR / "skus.json"
+SUPPLEMENT_PATH   = DATA_DIR / "sku-supplement.json"
+SHOPIFY_CFG_PATH  = DATA_DIR / "shopify-config.json"
+
+DEFAULT_SUPPLEMENT = {
+    "velocity_per_day": 30,
+    "lead_time_days": 21,
+    "supplier_name": "Shopify Store",
+    "reorder_qty": 500,
+}
+
 
 def strip_markdown(text):
-    text = re.sub(r'#{1,6}\s*', '', text)          # headings
-    text = re.sub(r'\*{1,3}([^*]+)\*{1,3}', r'\1', text)  # bold/italic
-    text = re.sub(r'_([^_]+)_', r'\1', text)       # underscores
-    text = re.sub(r'`{1,3}([^`]*)`{1,3}', r'\1', text)    # inline code / code blocks
-    text = re.sub(r'^\s*[-*+]\s+', '', text, flags=re.MULTILINE)  # bullet points
-    text = re.sub(r'^\s*\d+\.\s+', '', text, flags=re.MULTILINE)  # numbered lists
-    text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)  # links
-    text = re.sub(r'\n{3,}', '\n\n', text)         # excess blank lines
+    text = re.sub(r'#{1,6}\s*', '', text)
+    text = re.sub(r'\*{1,3}([^*]+)\*{1,3}', r'\1', text)
+    text = re.sub(r'_([^_]+)_', r'\1', text)
+    text = re.sub(r'`{1,3}([^`]*)`{1,3}', r'\1', text)
+    text = re.sub(r'^\s*[-*+]\s+', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^\s*\d+\.\s+', '', text, flags=re.MULTILINE)
+    text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
+    text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
 
-DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "skus.json"
+
+def _load_supplement() -> dict:
+    try:
+        return json.loads(SUPPLEMENT_PATH.read_text())
+    except Exception:
+        return {}
+
+
+def _shopify_config() -> dict | None:
+    store = os.getenv("SHOPIFY_STORE")
+    token = os.getenv("SHOPIFY_TOKEN")
+    if store and token:
+        return {"store": store, "token": token}
+    try:
+        cfg = json.loads(SHOPIFY_CFG_PATH.read_text())
+        if cfg.get("store") and cfg.get("token"):
+            return cfg
+    except Exception:
+        pass
+    return None
+
+
+def _fetch_shopify_skus(store: str, token: str) -> list[dict]:
+    url = f"https://{store}/admin/api/2024-01/products.json?fields=id,title,variants&limit=250"
+    req = urllib.request.Request(url, headers={"X-Shopify-Access-Token": token})
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        products = json.loads(resp.read())["products"]
+
+    supplement = _load_supplement()
+    skus = []
+    for product in products:
+        variants = product["variants"]
+        for variant in variants:
+            supp = (
+                supplement.get(variant["sku"])
+                or supplement.get(product["title"])
+                or DEFAULT_SUPPLEMENT
+            )
+            label = (
+                f" {variant['title']}"
+                if len(variants) > 1 and variant["title"] != "Default Title"
+                else ""
+            )
+            skus.append({
+                "id": variant["sku"] or f"shopify-{variant['id']}",
+                "name": f"{product['title']}{label}",
+                "stock": variant["inventory_quantity"],
+                "velocity_per_day": supp["velocity_per_day"],
+                "lead_time_days": supp["lead_time_days"],
+                "supplier_name": supp["supplier_name"],
+                "reorder_qty": supp["reorder_qty"],
+            })
+    return skus
+
+
+def load_skus(emit=None) -> list[dict]:
+    cfg = _shopify_config()
+    if cfg:
+        try:
+            skus = _fetch_shopify_skus(cfg["store"], cfg["token"])
+            if emit:
+                emit("STATUS", f"Loaded {len(skus)} SKUs from Shopify")
+            return skus
+        except Exception as exc:
+            if emit:
+                emit("STATUS", f"Shopify fetch failed ({exc}), falling back to local data")
+    return json.loads(LOCAL_SKUS_PATH.read_text())
 
 
 def get_gemini_client():
@@ -46,9 +125,7 @@ def generate_text(client, prompt):
 def run_agent(emit):
     client = get_gemini_client()
 
-    with DATA_PATH.open() as sku_file:
-        skus = json.load(sku_file)
-
+    skus = load_skus(emit)
     emit("WATCH", f"Polling {len(skus)} SKUs...")
 
     for sku in skus:
