@@ -10,20 +10,20 @@ from fastapi.responses import StreamingResponse
 
 from agent.chain_agent import run_agent, adjust_shopify_inventory, load_skus
 
-DATA_DIR   = Path(__file__).resolve().parents[1] / "data"
-SMS_CONFIG = DATA_DIR / "sms-config.json"
+DATA_DIR     = Path(__file__).resolve().parents[1] / "data"
+EMAIL_CONFIG = DATA_DIR / "email-config.json"
 
 
-def _read_sms_config() -> dict:
+def _read_email_config() -> dict:
     try:
-        return json.loads(SMS_CONFIG.read_text())
+        return json.loads(EMAIL_CONFIG.read_text())
     except Exception:
-        return {"enabled": False, "phone": ""}
+        return {"enabled": False, "email": ""}
 
 
-def _write_sms_config(cfg: dict) -> None:
+def _write_email_config(cfg: dict) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    SMS_CONFIG.write_text(json.dumps(cfg, indent=2))
+    EMAIL_CONFIG.write_text(json.dumps(cfg, indent=2))
 
 # ---------------------------------------------------------------------------
 # App
@@ -160,18 +160,46 @@ async def get_skus():
     return load_skus()
 
 
-class SmsConfigBody(BaseModel):
+class EmailConfigBody(BaseModel):
     enabled: bool
-    phone: str
+    email: str
 
 
-@app.get("/sms-config")
-def get_sms_config():
-    return _read_sms_config()
+@app.get("/email-config")
+def get_email_config():
+    return _read_email_config()
 
 
-@app.post("/sms-config")
-def save_sms_config(body: SmsConfigBody):
-    cfg = {"enabled": body.enabled, "phone": body.phone.strip()}
-    _write_sms_config(cfg)
+@app.post("/email-config")
+def save_email_config(body: EmailConfigBody):
+    cfg = {"enabled": body.enabled, "email": body.email.strip()}
+    _write_email_config(cfg)
     return {"status": "saved", **cfg}
+
+
+@app.post("/email-test")
+def send_test_email():
+    from agent.twilio_email import SENDGRID_API_KEY, EMAIL_FROM, _send
+    cfg = _read_email_config()
+    to_email = cfg.get("email", "").strip()
+    if not to_email:
+        return {"status": "error", "detail": "No email address configured"}
+    if not SENDGRID_API_KEY or not EMAIL_FROM:
+        return {"status": "error", "detail": "SendGrid credentials not set in .env (SENDGRID_API_KEY, EMAIL_FROM)"}
+    import urllib.error
+    try:
+        _send(
+            to_email,
+            subject="[ChainAgent] Test notification",
+            body="ChainAgent: Test notification — your email alerts are working correctly.",
+        )
+        return {"status": "sent"}
+    except urllib.error.HTTPError as e:
+        body = e.read().decode(errors="replace")
+        try:
+            detail = json.loads(body).get("errors", [{}])[0].get("message", body)
+        except Exception:
+            detail = body
+        return {"status": "error", "detail": f"SendGrid {e.code}: {detail}"}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}

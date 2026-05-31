@@ -659,35 +659,51 @@ function NotificationsSection() {
   ]
   const [states, setStates] = useState(staticChannels.map(c=>c.on))
 
-  // SMS state — persisted via backend
-  const [smsEnabled, setSmsEnabled] = useState(false)
-  const [smsPhone, setSmsPhone]     = useState("")
-  const [smsSaving, setSmsSaving]   = useState(false)
-  const [smsSaved,  setSmsSaved]    = useState(false)
+  // Email state — persisted via backend
+  const [emailEnabled, setEmailEnabled] = useState(false)
+  const [emailAddr, setEmailAddr]       = useState("")
+  const [emailSaving, setEmailSaving]   = useState(false)
+  const [emailSaved,  setEmailSaved]    = useState(false)
+  const [emailTesting, setEmailTesting] = useState(false)
+  const [emailTestMsg, setEmailTestMsg] = useState("")
 
   useEffect(()=>{
-    fetch("/api/sms-config").then(r=>r.json()).then(d=>{
-      setSmsEnabled(d.enabled ?? false)
-      setSmsPhone(d.phone ?? "")
+    fetch("/api/email-config").then(r=>r.json()).then(d=>{
+      setEmailEnabled(d.enabled ?? false)
+      setEmailAddr(d.email ?? "")
     }).catch(()=>{})
   },[])
 
-  async function saveSmsConfig(enabled: boolean, phone: string) {
-    setSmsSaving(true); setSmsSaved(false)
+  async function saveEmailConfig(enabled: boolean, email: string) {
+    setEmailSaving(true); setEmailSaved(false)
     try {
-      await fetch("/api/sms-config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled,phone})})
-      setSmsSaved(true)
-      setTimeout(()=>setSmsSaved(false),2000)
-    } finally { setSmsSaving(false) }
+      await fetch("/api/email-config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled,email})})
+      setEmailSaved(true)
+      setTimeout(()=>setEmailSaved(false),2000)
+    } finally { setEmailSaving(false) }
   }
 
-  function handleSmsToggle(v: boolean) {
-    setSmsEnabled(v)
-    saveSmsConfig(v, smsPhone)
+  function handleEmailToggle(v: boolean) {
+    setEmailEnabled(v)
+    saveEmailConfig(v, emailAddr)
   }
 
-  function handlePhoneSave() {
-    saveSmsConfig(smsEnabled, smsPhone)
+  function handleEmailSave() {
+    saveEmailConfig(emailEnabled, emailAddr)
+  }
+
+  async function handleEmailTest() {
+    setEmailTesting(true); setEmailTestMsg("")
+    try {
+      const res = await fetch("/api/email-test", { method: "POST" })
+      const data = await res.json()
+      setEmailTestMsg(data.status === "sent" ? "Sent ✓" : `Error: ${data.detail}`)
+    } catch {
+      setEmailTestMsg("Error: request failed")
+    } finally {
+      setEmailTesting(false)
+      setTimeout(() => setEmailTestMsg(""), 4000)
+    }
   }
 
   return (
@@ -707,39 +723,44 @@ function NotificationsSection() {
             </div>
           ))}
 
-          {/* SMS — live Twilio integration */}
-          <div style={{background:"var(--surface2)",border:`1px solid ${smsEnabled?"rgba(37,211,102,0.25)":"var(--border)"}`,borderRadius:10,padding:"12px 14px"}}>
+          {/* Email — live SendGrid integration */}
+          <div style={{background:"var(--surface2)",border:`1px solid ${emailEnabled?"rgba(37,211,102,0.25)":"var(--border)"}`,borderRadius:10,padding:"12px 14px"}}>
             <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:8}}>
-              <div style={{width:28,height:28,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,background:"#25D366",flexShrink:0}}>📱</div>
+              <div style={{width:28,height:28,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,background:"#EA4335",flexShrink:0}}>📧</div>
               <div style={{flex:1}}>
-                <div style={{fontSize:12,fontWeight:500,color:"var(--text)"}}>SMS</div>
-                <div style={{...S.mono,fontSize:10,color:smsEnabled?"var(--accent)":"var(--muted)"}}>
-                  {smsEnabled ? (smsPhone ? `● ${smsPhone}` : "● Enabled · no phone set") : "◌ via Twilio API"}
+                <div style={{fontSize:12,fontWeight:500,color:"var(--text)"}}>Email Alerts</div>
+                <div style={{...S.mono,fontSize:10,color:emailEnabled?"var(--accent)":"var(--muted)"}}>
+                  {emailEnabled ? (emailAddr ? `● ${emailAddr}` : "● Enabled · no email set") : "◌ via SendGrid"}
                 </div>
               </div>
-              <Toggle on={smsEnabled} onChange={handleSmsToggle}/>
+              <Toggle on={emailEnabled} onChange={handleEmailToggle}/>
             </div>
             <div style={{fontSize:11,color:"var(--muted2)",lineHeight:1.6,borderTop:"1px solid var(--border)",paddingTop:8}}>
-              <strong>Preview:</strong> ChainAgent: ⚠ Portland Aviator Pro — 8.9 days left. Reorder drafted. Log in to approve.
+              <strong>Preview:</strong> [ChainAgent] Action Required — Portland Aviator Pro stockout in 8.9 days. Reorder awaiting approval.
             </div>
             <div style={{marginTop:10,display:"flex",gap:7,alignItems:"center"}}>
               <input
-                type="tel"
-                placeholder="+1 555 000 0000"
-                value={smsPhone}
-                onChange={e=>setSmsPhone(e.target.value)}
+                type="email"
+                placeholder="you@example.com"
+                value={emailAddr}
+                onChange={e=>setEmailAddr(e.target.value)}
                 style={{...S.mono,flex:1,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:6,padding:"6px 10px",color:"var(--text)",fontSize:11,outline:"none"}}
               />
-              <Btn onClick={handlePhoneSave} disabled={smsSaving} style={{fontSize:10,padding:"6px 12px",opacity:smsSaving?0.6:1}}>
-                {smsSaving?"Saving…":smsSaved?"Saved ✓":"Save"}
+              <Btn onClick={handleEmailSave} disabled={emailSaving} style={{fontSize:10,padding:"6px 12px",opacity:emailSaving?0.6:1}}>
+                {emailSaving?"Saving…":emailSaved?"Saved ✓":"Save"}
               </Btn>
             </div>
             <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginTop:6}}>
-              Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM in .env
+              Set SENDGRID_API_KEY and EMAIL_FROM in .env
             </div>
           </div>
 
-          <Btn style={{width:"100%",justifyContent:"center",padding:10}}>📤 Send test notification</Btn>
+          <div style={{display:"flex",flexDirection:"column",gap:4}}>
+            <Btn onClick={handleEmailTest} disabled={emailTesting} style={{width:"100%",justifyContent:"center",padding:10,opacity:emailTesting?0.6:1}}>
+              {emailTesting ? "Sending…" : "📤 Send test notification"}
+            </Btn>
+            {emailTestMsg && <div style={{...S.mono,fontSize:10,textAlign:"center",color:emailTestMsg.startsWith("Error")?"var(--red)":"var(--accent)"}}>{emailTestMsg}</div>}
+          </div>
         </div>
       </Panel>
     </>
