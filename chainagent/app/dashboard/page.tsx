@@ -874,7 +874,7 @@ function AgentSection({brand,supplierEmail,supplierName,agentRunning,trace,showE
       </div>
       {showEmail&&(
         <div className="email-panel" style={{background:"var(--surface)",border:"1px solid var(--border)",borderLeft:"3px solid var(--accent)",borderRadius:14,overflow:"hidden"}}>
-          <PanelHeader title={<>📧 Drafted Supplier Email <BeHook>← claude_draft.py</BeHook></>}/>
+          <PanelHeader title={<>📧 Drafted Supplier Email</>}/>
           <div style={{padding:"12px 18px",borderBottom:"1px solid var(--border)"}}>
             <div style={{display:"flex",gap:10,...S.mono,fontSize:12,padding:"4px 0"}}>
               <span style={{color:"var(--muted)",minWidth:55}}>To:</span>
