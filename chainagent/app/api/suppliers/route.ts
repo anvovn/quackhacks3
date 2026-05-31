@@ -1,14 +1,36 @@
 import { NextResponse } from 'next/server';
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { getShopifyConfig, shopifyFetch, NOT_CONFIGURED } from '@/lib/shopify';
+
+interface ShopifyProduct { id: number; vendor: string; title: string }
 
 export async function GET() {
+  const cfg = getShopifyConfig();
+  if (!cfg) return NextResponse.json(NOT_CONFIGURED);
+
   try {
-    const filePath = join(process.cwd(), 'data', 'suppliers.json');
-    const raw = readFileSync(filePath, 'utf-8');
-    return NextResponse.json(JSON.parse(raw));
-  } catch (error) {
-    console.error('Failed to read suppliers.json:', error);
-    return NextResponse.json({ error: 'Failed to load supplier data' }, { status: 500 });
+    const { products } = await shopifyFetch<{ products: ShopifyProduct[] }>(
+      cfg, 'products.json?fields=id,vendor,title&limit=250'
+    );
+
+    const vendorMap = new Map<string, number>();
+    products.forEach(p => {
+      const v = p.vendor?.trim();
+      if (v) vendorMap.set(v, (vendorMap.get(v) || 0) + 1);
+    });
+
+    const suppliers = Array.from(vendorMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, skuCount], i) => ({
+        id: `VEN-${i + 1}`,
+        name,
+        skuCount,
+        active: true,
+        source: 'shopify' as const,
+      }));
+
+    return NextResponse.json(suppliers);
+  } catch (err) {
+    console.error('Shopify suppliers fetch failed:', err);
+    return NextResponse.json({ error: 'shopify_unreachable' }, { status: 503 });
   }
 }
