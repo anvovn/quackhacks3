@@ -620,7 +620,7 @@ function AgentInquiriesPanel() {
   )
 }
 
-function OrderHistorySection({orders: initOrders, auditRows, pendingReorders, onClear}:{orders:PurchaseOrder[], auditRows:AuditRow[], pendingReorders:PendingReorder[], onClear:()=>void}) {
+function OrderHistorySection({orders: initOrders, auditRows, pendingReorders, onClear, onUpdateOrder}:{orders:PurchaseOrder[], auditRows:AuditRow[], pendingReorders:PendingReorder[], onClear:()=>void, onUpdateOrder:(ref:string, status:PurchaseOrder["status"])=>void}) {
   const [orders, setOrders] = useState(initOrders)
   const [activeTab, setActiveTab] = useState<"orders"|"inquiries">("orders")
   useEffect(()=>setOrders(initOrders),[initOrders])
@@ -695,7 +695,7 @@ function OrderHistorySection({orders: initOrders, auditRows, pendingReorders, on
               <div style={{...S.mono,fontSize:11,color:"var(--muted)"}}>{po.orderDate}</div>
               <StatusPill label={pillLabel(po.status)} type={pillType(po.status)}/>
               {po.status!=="received"
-                ?<Btn style={{fontSize:10,padding:"4px 10px"}} onClick={()=>setOrders(prev=>prev.map(p=>p.ref===po.ref?{...p,status:nextStatus[p.status]}:p))}>{nextLabel(po.status)}</Btn>
+                ?<Btn style={{fontSize:10,padding:"4px 10px"}} onClick={()=>{const s=nextStatus[po.status];setOrders(prev=>prev.map(p=>p.ref===po.ref?{...p,status:s}:p));onUpdateOrder(po.ref,s)}}>{nextLabel(po.status)}</Btn>
                 :<div style={{...S.mono,fontSize:10,color:"var(--accent)"}}>✓ Complete</div>}
             </div>
           ))}
@@ -1265,6 +1265,8 @@ export default function Dashboard() {
         if(saved.autoSendWindowHrs!=null && saved.autoSendWindowMins==null) saved.autoSendWindowMins = saved.autoSendWindowHrs * 60
         setAgentSettings(s=>({...s,...saved}))
       }
+      const rawSection = localStorage.getItem(`chainagent:${userKey}:section`)
+      if(rawSection) setSection(rawSection)
       const rawOrders = localStorage.getItem(`chainagent:${userKey}:orders`)
       if(rawOrders) setOrders(JSON.parse(rawOrders))
       const rawAudit = localStorage.getItem(`chainagent:${userKey}:auditRows`)
@@ -1279,6 +1281,7 @@ export default function Dashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[userKey])
 
+  useEffect(()=>{ try { localStorage.setItem(`chainagent:${userKey}:section`, section) } catch {} },[userKey, section])
   useEffect(()=>{ try { localStorage.setItem(`chainagent:${userKey}:agentSettings`, JSON.stringify(agentSettings)) } catch {} },[userKey, agentSettings])
   useEffect(()=>{ try { localStorage.setItem(`chainagent:${userKey}:orders`, JSON.stringify(orders)) } catch {} },[userKey, orders])
   useEffect(()=>{ try { localStorage.setItem(`chainagent:${userKey}:auditRows`, JSON.stringify(auditRows)) } catch {} },[userKey, auditRows])
@@ -1703,7 +1706,7 @@ export default function Dashboard() {
             )
           )}
           {section==="suppliers" && (shopifyConnected===null?null:shopifyConnected===false?<ShopifyGate onSettings={()=>setSection("settings")}/>:<SuppliersSection suppliers={suppliers} onAdd={s=>setSuppliers(prev=>[...prev,s])} onUpdate={s=>setSuppliers(prev=>prev.map(p=>p.id===s.id?s:p))}/>)}
-          {section==="history"   && <OrderHistorySection orders={orders} auditRows={auditRows} pendingReorders={pendingReorders} onClear={()=>{setOrders([]);setAuditRows([])}}/>}
+          {section==="history"   && <OrderHistorySection orders={orders} auditRows={auditRows} pendingReorders={pendingReorders} onClear={()=>{setOrders([]);setAuditRows([])}} onUpdateOrder={(ref,status)=>setOrders(prev=>prev.map(p=>p.ref===ref?{...p,status}:p))}/>}
           {section==="notifications"&&<NotificationsSection/>}
           {section==="settings"    &&<SettingsSection agentSettings={agentSettings} onSaveSettings={setAgentSettings}/>}
         </main>
