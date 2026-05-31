@@ -650,8 +650,9 @@ function AgentInquiriesPanel() {
   )
 }
 
-function OrderHistorySection({orders, auditRows, inbounds, onUpdateOrder}:{orders:PurchaseOrder[], auditRows:AuditRow[], inbounds:StockInbound[], onUpdateOrder:(ref:string, status:PurchaseOrder["status"])=>void}) {
+function OrderHistorySection({orders, auditRows, inbounds, onUpdateOrder, onClearHistory}:{orders:PurchaseOrder[], auditRows:AuditRow[], inbounds:StockInbound[], onUpdateOrder:(ref:string, status:PurchaseOrder["status"])=>void, onClearHistory:()=>void}) {
   const [activeTab, setActiveTab] = useState<"orders"|"inquiries">("orders")
+  const [confirmClear, setConfirmClear] = useState(false)
 
   const pillType = (s:PurchaseOrder["status"]):React.ComponentProps<typeof StatusPill>["type"] =>
     s==="received"?"live":s==="in-transit"?"transit":s==="confirmed"?"pending":"draft"
@@ -680,9 +681,20 @@ function OrderHistorySection({orders, auditRows, inbounds, onUpdateOrder}:{order
         title={activeTab==="orders" ? "Agent Orders" : "Agent Inquiries"}
         action={
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            {activeTab==="orders" && <>
-              <Btn onClick={exportCSV}>↓ Export CSV</Btn>
-            </>}
+            {activeTab==="orders" && (
+              confirmClear ? (
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{...S.mono,fontSize:11,color:"var(--muted)"}}>Clear all orders and activity?</span>
+                  <Btn style={{color:"var(--red)",borderColor:"rgba(239,68,68,0.4)"}} onClick={()=>{onClearHistory();setConfirmClear(false)}}>Yes, clear</Btn>
+                  <Btn onClick={()=>setConfirmClear(false)}>Cancel</Btn>
+                </div>
+              ) : (
+                <>
+                  <Btn onClick={exportCSV}>↓ Export CSV</Btn>
+                  <Btn style={{color:"var(--muted)"}} onClick={()=>setConfirmClear(true)}>✕ Clear History</Btn>
+                </>
+              )
+            )}
             <div style={{display:"flex",gap:4}}>
               <button style={tabBtnStyle(activeTab==="orders")}    onClick={()=>setActiveTab("orders")}>Orders</button>
               <button style={tabBtnStyle(activeTab==="inquiries")} onClick={()=>setActiveTab("inquiries")}>Inquiries</button>
@@ -1254,6 +1266,7 @@ export default function Dashboard() {
   const [section, setSection]     = useState("overview")
   const [syncSecs, setSyncSecs]   = useState(0)
   const [syncPhase, setSyncPhase] = useState<"idle"|"syncing"|"done">("idle")
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date|null>(null)
   const [agentSettings, setAgentSettings] = useState({
     autoApprove: false, scheduleEnabled: false,
     scheduleIntervalMins: 0.5, autoSendWindowMins: 120, riskThresholdDays: 14,
@@ -1517,6 +1530,7 @@ export default function Dashboard() {
       .catch(()=>setLiveSkus("error"))
     setTimeout(()=>{
       setSyncPhase("done")
+      setLastSyncedAt(new Date())
       setTimeout(()=>setSyncPhase("idle"), 1200)
     }, 1200)
   },[syncPhase])
@@ -1619,6 +1633,11 @@ export default function Dashboard() {
               <span style={{display:"inline-block", animation: syncPhase==="syncing" ? "spin 0.7s linear infinite" : "none"}}>↻</span>
               Resync
             </button>
+            {agentSettings.autoResyncEnabled && (
+              <div onClick={()=>setSection("settings")} style={{...S.mono,fontSize:10,color:"var(--muted)",padding:"4px 10px",borderRadius:100,background:"var(--surface2)",border:"1px solid var(--border)",cursor:"pointer"}} title="Go to Settings">
+                Auto-resync · {agentSettings.autoResyncSecs}s
+              </div>
+            )}
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8,background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:8,padding:"6px 12px",...S.mono,fontSize:11,color:"var(--text)"}}>
             🏷 {brand?.label ?? "portland-optics-65ovalib"}
@@ -1759,7 +1778,7 @@ export default function Dashboard() {
             )
           )}
           {section==="suppliers" && (shopifyConnected===null?null:shopifyConnected===false?<ShopifyGate onSettings={()=>setSection("settings")}/>:<SuppliersSection suppliers={suppliers} onAdd={s=>setSuppliers(prev=>[...prev,s])} onUpdate={s=>setSuppliers(prev=>prev.map(p=>p.id===s.id?s:p))}/>)}
-          {section==="history"   && <OrderHistorySection orders={orders} auditRows={auditRows} inbounds={inbounds} onUpdateOrder={(ref,status)=>setOrders(prev=>prev.map(p=>p.ref===ref?{...p,status}:p))}/>}
+          {section==="history"   && <OrderHistorySection orders={orders} auditRows={auditRows} inbounds={inbounds} onUpdateOrder={(ref,status)=>setOrders(prev=>prev.map(p=>p.ref===ref?{...p,status}:p))} onClearHistory={()=>{setOrders([]);setAuditRows([])}}/>}
           {section==="notifications"&&<NotificationsSection/>}
           {section==="settings"    &&<SettingsSection agentSettings={agentSettings} onSaveSettings={setAgentSettings}/>}
         </main>
