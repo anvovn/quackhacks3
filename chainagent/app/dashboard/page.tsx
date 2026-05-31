@@ -1574,7 +1574,7 @@ export default function Dashboard() {
     {id:"agent",       name:"Run Agent",      icon:"⚡", label:"Monitor"},
     {id:"inventory",   name:"Inventory",      icon:"◫", label:"Monitor"},
     {id:"inbounds",    name:"Stock Inbounds", icon:"📥",label:"Monitor",badge:inbounds.length>0?String(inbounds.length):undefined,badgeColor:"amber"},
-    {id:"orders",      name:"Orders",         icon:"📦",label:"Monitor"},
+    {id:"orders",      name:"Customer Orders", icon:"📦",label:"Monitor"},
     {id:"suppliers",   name:"Suppliers",      icon:"◉", label:"Manage"},
     {id:"history",     name:"Agent Orders",icon:"≡",label:"Manage",badge:auditRows.length>0?String(auditRows.length):undefined,badgeColor:"green"},
     {id:"notifications",name:"Notifications", icon:"🔔",label:"Manage"},
