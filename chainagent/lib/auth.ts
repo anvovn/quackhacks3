@@ -19,4 +19,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   pages: {
     signIn: "/login",
   },
+  callbacks: {
+    authorized: ({ auth: session, request: { nextUrl } }) => {
+      if (nextUrl.pathname.startsWith("/dashboard")) {
+        return !!session?.user;
+      }
+      return true;
+    },
+  },
 });

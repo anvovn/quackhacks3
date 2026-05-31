@@ -1,13 +1,20 @@
 'use client';
 
-import { useState } from 'react';
-import { signIn } from 'next-auth/react';
+import { useEffect, useState } from 'react';
+import { signIn, signOut, useSession } from 'next-auth/react';
 
 export default function LoginPage() {
+  const { data: session, status } = useSession();
   const [googleLoading, setGoogleLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (status === 'authenticated') {
+      window.location.href = '/dashboard';
+    }
+  }, [status]);
 
   async function handleGoogleLogin() {
     setError('');
@@ -18,6 +25,10 @@ export default function LoginPage() {
       setError('Sign-in failed. Check AUTH_GOOGLE_ID and AUTH_GOOGLE_SECRET in .env.local.');
       setGoogleLoading(false);
     }
+  }
+
+  async function handleUseAnotherAccount() {
+    await signOut({ callbackUrl: '/login' });
   }
 
   function handleEmailLogin() {
@@ -342,6 +353,19 @@ export default function LoginPage() {
                 Sign in →
               </button>
             </div>
+
+            {status === 'authenticated' && session?.user?.email && (
+              <div className="login-error" style={{ color: 'var(--muted)', background: 'rgba(255,255,255,0.04)' }}>
+                Signed in as {session.user.email}.{' '}
+                <button
+                  type="button"
+                  onClick={handleUseAnotherAccount}
+                  style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', font: 'inherit', textDecoration: 'underline' }}
+                >
+                  Use another account
+                </button>
+              </div>
+            )}
 
             {error && (
               <div id="loginError" className="login-error">{error}</div>
