@@ -441,7 +441,7 @@ function OrdersSection({orders: allOrders}:{orders:ShopifyOrder[]}) {
 
   return (
     <>
-      <SectionHeader eyebrow="// order management" title="Orders" hook="← /api/orders"/>
+      <SectionHeader eyebrow="// order management" title="Customer Orders" hook="← /api/orders"/>
       <Panel>
         {allOrders.length === 0 ? (
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"48px 0",gap:10}}>
@@ -651,7 +651,6 @@ function AgentInquiriesPanel() {
 }
 
 function OrderHistorySection({orders, auditRows, inbounds, onUpdateOrder, onClearHistory}:{orders:PurchaseOrder[], auditRows:AuditRow[], inbounds:StockInbound[], onUpdateOrder:(ref:string, status:PurchaseOrder["status"])=>void, onClearHistory:()=>void}) {
-  const [activeTab, setActiveTab] = useState<"orders"|"inquiries">("orders")
   const [confirmClear, setConfirmClear] = useState(false)
 
   const pillType = (s:PurchaseOrder["status"]):React.ComponentProps<typeof StatusPill>["type"] =>
@@ -668,20 +667,14 @@ function OrderHistorySection({orders, auditRows, inbounds, onUpdateOrder, onClea
 
   const isEmpty = orders.length===0 && auditRows.length===0 && inbounds.length===0
 
-  const tabBtnStyle = (active: boolean) => ({
-    ...S.mono, fontSize:11, padding:"5px 14px", borderRadius:6, border:"1px solid var(--border)",
-    background: active ? "var(--accent)" : "transparent",
-    color: active ? "#000" : "var(--muted)", cursor:"pointer" as const,
-  })
-
   return (
     <>
       <SectionHeader
         eyebrow="// agent orders"
-        title={activeTab==="orders" ? "Agent Orders" : "Agent Inquiries"}
+        title="Agent Orders"
         action={
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            {activeTab==="orders" && (
+            {(
               confirmClear ? (
                 <div style={{display:"flex",alignItems:"center",gap:6}}>
                   <span style={{...S.mono,fontSize:11,color:"var(--muted)"}}>Clear all orders and activity?</span>
@@ -695,19 +688,12 @@ function OrderHistorySection({orders, auditRows, inbounds, onUpdateOrder, onClea
                 </>
               )
             )}
-            <div style={{display:"flex",gap:4}}>
-              <button style={tabBtnStyle(activeTab==="orders")}    onClick={()=>setActiveTab("orders")}>Orders</button>
-              <button style={tabBtnStyle(activeTab==="inquiries")} onClick={()=>setActiveTab("inquiries")}>Inquiries</button>
-            </div>
+
           </div>
         }
       />
 
-      {activeTab==="inquiries" ? (
-        <Panel><AgentInquiriesPanel/></Panel>
-      ) : <>
-
-      {/* Purchase Orders */}
+      {/* Purchase Orders */
       <Panel>
         <PanelHeader title="📋 Purchase Orders"/>
         {orders.length===0?(
@@ -773,7 +759,6 @@ function OrderHistorySection({orders, auditRows, inbounds, onUpdateOrder, onClea
           ))}
         </>}
       </Panel>
-      </>}
     </>
   )
 }
@@ -1576,7 +1561,8 @@ export default function Dashboard() {
     {id:"inbounds",    name:"Stock Inbounds", icon:"📥",label:"Monitor",badge:inbounds.length>0?String(inbounds.length):undefined,badgeColor:"amber"},
     {id:"orders",      name:"Customer Orders", icon:"📦",label:"Monitor"},
     {id:"suppliers",   name:"Suppliers",      icon:"◉", label:"Manage"},
-    {id:"history",     name:"Agent Orders",icon:"≡",label:"Manage",badge:auditRows.length>0?String(auditRows.length):undefined,badgeColor:"green"},
+    {id:"history",     name:"Agent Orders",    icon:"≡", label:"Manage",badge:auditRows.length>0?String(auditRows.length):undefined,badgeColor:"green"},
+    {id:"inquiries",   name:"Agent Inquiries", icon:"◑", label:"Manage"},
     {id:"notifications",name:"Notifications", icon:"🔔",label:"Manage"},
     {id:"settings",    name:"Settings",       icon:"◎", label:"Manage"},
   ]
@@ -1770,6 +1756,7 @@ export default function Dashboard() {
             )
           )}
           {section==="suppliers" && (shopifyConnected===null?null:shopifyConnected===false?<ShopifyGate onSettings={()=>setSection("settings")}/>:<SuppliersSection suppliers={suppliers} onAdd={s=>setSuppliers(prev=>[...prev,s])} onUpdate={s=>setSuppliers(prev=>prev.map(p=>p.id===s.id?s:p))}/>)}
+          {section==="inquiries" && <><SectionHeader eyebrow="// agent inquiries" title="Agent Inquiries"/><Panel><AgentInquiriesPanel/></Panel></> }
           {section==="history"   && <OrderHistorySection orders={orders} auditRows={auditRows} inbounds={inbounds} onUpdateOrder={(ref,status)=>setOrders(prev=>prev.map(p=>p.ref===ref?{...p,status}:p))} onClearHistory={()=>{setOrders([]);setAuditRows([])}}/>}
           {section==="notifications"&&<NotificationsSection/>}
           {section==="settings"    &&<SettingsSection agentSettings={agentSettings} onSaveSettings={setAgentSettings}/>}
