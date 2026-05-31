@@ -969,7 +969,7 @@ function ApiKeysPanel() {
   )
 }
 
-type AgentSettings = { autoApprove:boolean; scheduleEnabled:boolean; scheduleIntervalMins:number; autoSendWindowMins:number; riskThresholdDays:number }
+type AgentSettings = { autoApprove:boolean; scheduleEnabled:boolean; scheduleIntervalMins:number; autoSendWindowMins:number; riskThresholdDays:number; autoResyncEnabled:boolean; autoResyncSecs:number }
 
 function SettingsSection({agentSettings, onSaveSettings}:{agentSettings:AgentSettings, onSaveSettings:(s:AgentSettings)=>void}) {
   const { data: session } = useSession()
@@ -1037,8 +1037,9 @@ function SettingsSection({agentSettings, onSaveSettings}:{agentSettings:AgentSet
         <PanelHeader title="◎ Agent Configuration"/>
         <div style={{padding:16,display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
           {([
-            {key:"autoApprove",    label:"Auto-approve reorders", sub:"Send without manual approval"},
-            {key:"scheduleEnabled",label:"Auto-schedule agent",   sub:"Run on set interval"},
+            {key:"autoApprove",      label:"Auto-approve reorders", sub:"Send without manual approval"},
+            {key:"scheduleEnabled",  label:"Auto-schedule agent",   sub:"Run on set interval"},
+            {key:"autoResyncEnabled",label:"Auto-resync inventory", sub:"Periodically pull from Shopify"},
           ] as {key:keyof AgentSettings, label:string, sub:string}[]).map(({key,label,sub})=>(
             <div key={key} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 13px",background:"var(--surface2)",borderRadius:10,border:"1px solid var(--border)"}}>
               <div><div style={{fontSize:13,color:"var(--text)"}}>{label}</div><div style={{...S.mono,fontSize:10,color:"var(--muted)",marginTop:1}}>{sub}</div></div>
@@ -1049,6 +1050,7 @@ function SettingsSection({agentSettings, onSaveSettings}:{agentSettings:AgentSet
             {key:"riskThresholdDays",  label:"Risk threshold (days)",    sub:"Flag SKUs below this runway"},
             {key:"autoSendWindowMins",  label:"Auto-send window (mins)",  sub:"Mins before auto-approve fires"},
             {key:"scheduleIntervalMins",label:"Schedule interval (mins)", sub:"How often agent auto-runs"},
+            {key:"autoResyncSecs",      label:"Auto-resync interval (s)", sub:"Seconds between inventory syncs"},
           ] as {key:keyof AgentSettings, label:string, sub:string}[]).map(({key,label,sub})=>(
             <div key={key} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 13px",background:"var(--surface2)",borderRadius:10,border:"1px solid var(--border)"}}>
               <div><div style={{fontSize:13,color:"var(--text)"}}>{label}</div><div style={{...S.mono,fontSize:10,color:"var(--muted)",marginTop:1}}>{sub}</div></div>
@@ -1255,6 +1257,7 @@ export default function Dashboard() {
   const [agentSettings, setAgentSettings] = useState({
     autoApprove: false, scheduleEnabled: false,
     scheduleIntervalMins: 0.5, autoSendWindowMins: 120, riskThresholdDays: 14,
+    autoResyncEnabled: true, autoResyncSecs: 30,
   })
   const [scheduleSecs, setScheduleSecs] = useState(30)
   const [cdSecs, setCdSecs]       = useState(120 * 60)
@@ -1518,11 +1521,12 @@ export default function Dashboard() {
     }, 1200)
   },[syncPhase])
 
-  // Auto-resync every 10 seconds
+  // Auto-resync on configured interval
   useEffect(()=>{
-    const t = setInterval(handleResync, 10_000)
+    if(!agentSettings.autoResyncEnabled) return
+    const t = setInterval(handleResync, agentSettings.autoResyncSecs * 1000)
     return ()=>clearInterval(t)
-  },[handleResync])
+  },[handleResync, agentSettings.autoResyncEnabled, agentSettings.autoResyncSecs])
 
   // ── Simulation ──
   const [simRunning, setSimRunning] = useState(false)
