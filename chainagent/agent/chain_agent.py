@@ -15,14 +15,9 @@ load_dotenv()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
-SUPPLEMENT_PATH   = DATA_DIR / "sku-supplement.json"
-SHOPIFY_CFG_PATH  = DATA_DIR / "shopify-config.json"
+SHOPIFY_CFG_PATH = DATA_DIR / "shopify-config.json"
 
-DEFAULT_SUPPLEMENT = {
-    "velocity_per_day": 30,
-    "lead_time_days": 21,
-    "reorder_qty": 500,
-}
+VELOCITY_DAYS = 30
 
 
 def strip_markdown(text):
@@ -35,13 +30,6 @@ def strip_markdown(text):
     text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)
     text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
-
-
-def _load_supplement() -> dict:
-    try:
-        return json.loads(SUPPLEMENT_PATH.read_text())
-    except Exception:
-        return {}
 
 
 def _shopify_config() -> dict | None:
@@ -58,14 +46,9 @@ def _shopify_config() -> dict | None:
     return None
 
 
-VELOCITY_DAYS = 30
-
-
 def _fetch_velocity(store: str, token: str) -> dict[str, float]:
-    since = (
-        __import__("datetime").datetime.utcnow()
-        - __import__("datetime").timedelta(days=VELOCITY_DAYS)
-    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    import datetime
+    since = (datetime.datetime.utcnow() - datetime.timedelta(days=VELOCITY_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
     url = (
         f"https://{store}/admin/api/2024-01/orders.json"
         f"?status=any&created_at_min={since}&fields=line_items&limit=250"
@@ -90,36 +73,26 @@ def _fetch_shopify_skus(store: str, token: str) -> list[dict]:
     with urllib.request.urlopen(req, timeout=10) as resp:
         products = json.loads(resp.read())["products"]
 
-    supplement = _load_supplement()
     velocity = _fetch_velocity(store, token)
 
     skus = []
     for product in products:
         variants = product["variants"]
         for variant in variants:
-            supp = (
-                supplement.get(variant["sku"])
-                or supplement.get(product["title"])
-                or DEFAULT_SUPPLEMENT
-            )
             label = (
                 f" {variant['title']}"
                 if len(variants) > 1 and variant["title"] != "Default Title"
                 else ""
             )
             sku_id = variant["sku"] or f"shopify-{variant['id']}"
-            # Use real 30-day Shopify velocity; fall back to supplement only if no sales recorded
-            real_vel = velocity.get(variant["sku"]) if variant["sku"] else None
-            vel = real_vel if real_vel is not None and real_vel > 0 else supp["velocity_per_day"]
+            vel = velocity.get(variant["sku"]) if variant["sku"] else None
             skus.append({
                 "id": sku_id,
                 "variant_id": variant["id"],
                 "name": f"{product['title']}{label}",
                 "stock": variant["inventory_quantity"],
-                "velocity_per_day": vel,
-                "velocity_source": "shopify_orders" if real_vel else "supplement",
-                "lead_time_days": supp["lead_time_days"],
-                "reorder_qty": supp["reorder_qty"],
+                "velocity_per_day": vel,  # None means no sales data
+                "velocity_source": "shopify_orders" if vel else "no_data",
             })
     return skus
 
@@ -197,54 +170,71 @@ def run_agent(emit, supplier_name: str = "", supplier_email: str = ""):
 
     effective_supplier = supplier_name or "your supplier"
 
-    for sku in skus:
-        days = sku["stock"] / sku["velocity_per_day"]
-        src = sku.get("velocity_source", "supplement")
-        emit("WATCH", f"{sku['name']} · {sku['velocity_per_day']}/day ({src}) · days_left: {days:.1f}")
+    skus_with_data = [s for s in skus if s["velocity_per_day"] is not None]
+    skus_no_data   = [s for s in skus if s["velocity_per_day"] is None]
 
-        if days < sku["lead_time_days"]:
-            emit("RISK", f"Threshold breach: {sku['name']}")
+    for sku in skus_no_data:
+        emit("WATCH", f"{sku['name']} · no sales data in last {VELOCITY_DAYS} days — skipping")
 
-            # Step 1: Gemini reasons about risk
-            emit("THINK", "Invoking Gemini · reasoning...")
-            raw_reasoning = generate_text(
-                client,
-                f"You are a supply chain agent. Explain in plain English, no markdown formatting.\n\nSKU {sku['name']}: {days:.1f} days stock left, lead time {sku['lead_time_days']} days. Velocity: {sku['velocity_per_day']}/day. Should we reorder? Explain your reasoning, then on the last line write exactly: REORDER_QTY: <number>"
-            )
-            qty_match = re.search(r"REORDER_QTY:\s*(\d+)", raw_reasoning)
-            reorder_qty = int(qty_match.group(1)) if qty_match else sku["reorder_qty"]
-            reasoning = strip_markdown(re.sub(r"REORDER_QTY:\s*\d+", "", raw_reasoning).strip())
-            for line in reasoning.split("."):
-                if line.strip(): emit("THINK", line.strip())
+    for sku in skus_with_data:
+        vel = sku["velocity_per_day"]
+        stock = sku["stock"]
+        days = stock / vel if vel > 0 else float("inf")
+        emit("WATCH", f"{sku['name']} · {vel}/day (shopify_orders) · {stock} units · days_left: {days:.1f}")
 
-            # Step 2: Gemini drafts email using the supplier passed from the UI, no hardcoded placeholders
-            emit("ACT", "Drafting supplier email...")
-            effective_supplier = supplier_name or "your supplier"
-            email = strip_markdown(generate_text(
-                client,
-                f"""Write a short, professional plain-text reorder email using only the facts below.
+        # Step 1: Gemini reasons about risk and recommends reorder qty + urgency
+        emit("THINK", "Invoking Gemini · reasoning...")
+        raw_reasoning = generate_text(
+            client,
+            f"""You are a supply chain agent. Explain in plain English, no markdown.
+
+SKU: {sku['name']} (ID: {sku['id']})
+Current stock: {stock} units
+Sales velocity: {vel} units/day (calculated from last {VELOCITY_DAYS} days of Shopify orders)
+Days of stock remaining: {days:.1f}
+
+Based only on these real numbers, should we reorder? If yes, how many units and how urgent?
+End your response with exactly: REORDER_QTY: <number>
+If no reorder needed, end with: REORDER_QTY: 0"""
+        )
+        qty_match = re.search(r"REORDER_QTY:\s*(\d+)", raw_reasoning)
+        reorder_qty = int(qty_match.group(1)) if qty_match else 0
+        reasoning = strip_markdown(re.sub(r"REORDER_QTY:\s*\d+", "", raw_reasoning).strip())
+        for line in reasoning.split("."):
+            if line.strip():
+                emit("THINK", line.strip())
+
+        if reorder_qty == 0:
+            emit("WATCH", f"{sku['name']} · Gemini recommends no reorder at this time")
+            continue
+
+        emit("RISK", f"Reorder recommended: {sku['name']} · {reorder_qty} units")
+
+        # Step 2: Gemini drafts email from real data only
+        emit("ACT", "Drafting supplier email...")
+        email = strip_markdown(generate_text(
+            client,
+            f"""Write a short, professional plain-text reorder email using only the facts below.
 Do not add any placeholder text such as [Your Name], [Title], or [Phone Number].
 Sign off exactly as: "Portland Optics Operations\n— Sent automatically by ChainAgent"
 
 Facts:
 - Product: {sku['name']} (SKU: {sku['id']})
 - Supplier: {effective_supplier}
-- Current stock: {sku['stock']} units
-- Sales rate: {sku['velocity_per_day']} units/day
-- Stock runway: {days:.0f} days remaining
-- Lead time on file: {sku['lead_time_days']} days
+- Current stock: {stock} units
+- Sales rate: {vel} units/day (real 30-day Shopify data)
+- Days of stock remaining: {days:.0f}
 - Units needed: {reorder_qty}
 
 Ask the supplier to confirm availability and earliest ship date. Under 100 words. Plain text only."""
-            ))
-            emit("EMAIL", email)
-            emit("REORDER", json.dumps({
-                "id": sku["id"],
-                "variant_id": sku.get("variant_id"),
-                "name": sku["name"],
-                "qty": reorder_qty,
-                "supplier": effective_supplier,
-                "lead_time_days": sku["lead_time_days"],
-            }))
-            trigger_voice(sku, days)
-            log_snowflake(sku, reasoning, email, days)
+        ))
+        emit("EMAIL", email)
+        emit("REORDER", json.dumps({
+            "id": sku["id"],
+            "variant_id": sku.get("variant_id"),
+            "name": sku["name"],
+            "qty": reorder_qty,
+            "supplier": effective_supplier,
+        }))
+        trigger_voice(sku, days)
+        log_snowflake(sku, reasoning, email, days)

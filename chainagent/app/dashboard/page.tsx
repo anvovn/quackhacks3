@@ -8,8 +8,8 @@ import type { TraceLine, PendingReorder } from "./hooks/useAgentStream"
 interface SKU {
   name: string; id: string; stock: string; inc: string
   vel: string; days: string; pct: number; risk: string; rc: string
-  leadTime: string; price: string
-  velSource?: "shopify_orders" | "supplement"
+  price: string
+  velSource?: "shopify_orders" | "no_data"
 }
 interface Brand {
   name: string; label: string; days: string; stock: string
@@ -17,9 +17,9 @@ interface Brand {
   supplier: string; email: string; skus: SKU[]
 }
 interface RawSKU {
-  id?: string; name: string; stock: number; velocity_per_day: number
-  lead_time_days: number; reorder_qty: number; price?: string
-  velocity_source?: "shopify_orders" | "supplement"
+  id?: string; name: string; stock: number; velocity_per_day: number | null
+  price?: string
+  velocity_source?: "shopify_orders" | "no_data"
 }
 interface AuditRow { time: string; action: string; sku: string; label: string }
 interface Supplier {
@@ -307,7 +307,7 @@ function InventorySection({brand, suppliers, skuSupplierMap, onAssign}:{
               </div>
             </div>
             <RunwayBar days={sku.days} pct={sku.pct} risk={sku.risk}/>
-            <div style={{...S.mono,fontSize:12}}>{sku.leadTime}</div>
+            <div style={{...S.mono,fontSize:12,color:"var(--muted)"}}>—</div>
             <div style={{...S.mono,fontSize:12}}>{sku.price}</div>
             <select
               value={skuSupplierMap[sku.id]||""}
@@ -364,10 +364,7 @@ function InboundsSection({reorders, onReceive}: {reorders: PendingReorder[], onR
       ) : (
         <div style={{display:"flex",flexDirection:"column",gap:10}}>
           {reorders.map(r => {
-            const arrival = new Date(r.created_at + r.lead_time_days * 24 * 60 * 60 * 1000)
             const daysElapsed = Math.floor((Date.now() - r.created_at) / (24 * 60 * 60 * 1000))
-            const daysRemaining = Math.max(0, r.lead_time_days - daysElapsed)
-            const pct = Math.min(100, Math.round((daysElapsed / r.lead_time_days) * 100))
             const isReceiving = receiving === r.id
             return (
               <Panel key={r.id}>
@@ -382,13 +379,10 @@ function InboundsSection({reorders, onReceive}: {reorders: PendingReorder[], onR
                   <div>
                     <div style={{display:"flex",justifyContent:"space-between",...S.mono,fontSize:10,color:"var(--muted2)",marginBottom:5}}>
                       <span>Ordered today</span>
-                      <span style={{color:"var(--blue)"}}>ETA {arrival.toLocaleDateString("en-US",{month:"short",day:"numeric"})}</span>
+                      <span style={{color:"var(--blue)"}}>{daysElapsed === 0 ? "Awaiting shipment" : `${daysElapsed} day${daysElapsed !== 1 ? "s" : ""} in transit`}</span>
                     </div>
                     <div style={{height:4,background:"var(--surface3)",borderRadius:2}}>
-                      <div style={{height:"100%",width:`${pct}%`,background:"var(--blue)",borderRadius:2,transition:"width 1s"}}/>
-                    </div>
-                    <div style={{...S.mono,fontSize:9,color:"var(--muted)",marginTop:4}}>
-                      {daysRemaining === 0 ? "Arriving today" : `${daysRemaining} day${daysRemaining !== 1 ? "s" : ""} remaining · ${r.lead_time_days} day lead time`}
+                      <div style={{height:"100%",width:`${Math.min(100, daysElapsed * 5)}%`,background:"var(--blue)",borderRadius:2,transition:"width 1s"}}/>
                     </div>
                   </div>
                   <div style={{display:"flex",gap:8,alignItems:"center"}}>
@@ -1027,21 +1021,22 @@ export default function Dashboard() {
   const brand: Brand | null = (() => {
     if (!Array.isArray(liveSkus) || liveSkus.length === 0) return null
     const mappedSkus: SKU[] = liveSkus.map((s: RawSKU, i: number) => {
-      const days = s.stock / s.velocity_per_day
-      const risk = days < s.lead_time_days ? "Critical" : days < s.lead_time_days * 2 ? "Watch" : "Healthy"
-      const pct  = Math.min(100, Math.round((days / (s.lead_time_days * 3)) * 100))
+      const vel = s.velocity_per_day
+      const days = vel != null && vel > 0 ? s.stock / vel : null
+      // Without lead time data from Shopify, flag as Critical if < 14 days, Watch if < 30
+      const risk = days == null ? "No data" : days < 14 ? "Critical" : days < 30 ? "Watch" : "Healthy"
+      const pct  = days == null ? 0 : Math.min(100, Math.round((days / 90) * 100))
       return {
         name: s.name,
         id: s.id || `SKU-${String(i+1).padStart(3,"0")}`,
         stock: s.stock.toLocaleString(),
         inc: "—",
-        vel: `${s.velocity_per_day}/day`,
+        vel: vel != null ? `${vel}/day` : "No data",
         velSource: s.velocity_source,
-        days: days.toFixed(1),
+        days: days != null ? days.toFixed(1) : "—",
         pct,
         risk,
-        rc: risk==="Critical"?"risk-critical":risk==="Watch"?"risk-watch":"risk-ok",
-        leadTime: `${s.lead_time_days} days`,
+        rc: risk==="Critical"?"risk-critical":risk==="Watch"?"risk-watch":risk==="No data"?"risk-watch":"risk-ok",
         price: s.price ? `$${parseFloat(s.price).toFixed(2)}` : "—",
       }
     })
@@ -1066,10 +1061,7 @@ export default function Dashboard() {
   const agentSupplier = critMapped ? (suppliers.find(s => s.id === skuSupplierMap[critMapped.id]) ?? null) : null
   const agentSupplierEmail = agentSupplier?.email || ""
   const agentSupplierName  = agentSupplier?.name  || ""
-  const agentCritSku  = Array.isArray(liveSkus) ? (
-    liveSkus.find(s => s.id===critMapped?.id || s.name===critMapped?.name) ?? liveSkus[0]
-  ) : null
-  const agentReorderQty = agentCritSku?.reorder_qty ?? 500
+  const agentReorderQty = 0 // Gemini computes reorder qty from real velocity
 
   // Sync timer
   useEffect(()=>{
@@ -1121,25 +1113,23 @@ export default function Dashboard() {
   const handleApprove = useCallback(()=>{
     if(cdInt.current)clearInterval(cdInt.current)
     stream.approve()
-    const critSku = brand?.skus.find(s=>s.risk==="Critical")||brand?.skus[0]
-    const rawSku  = Array.isArray(liveSkus)?liveSkus.find(s=>s.id===critSku?.id||s.name===critSku?.name):null
-    const leadDays = rawSku?.lead_time_days ?? 21
-    const qty      = rawSku?.reorder_qty ?? 500
+    const critSku  = brand?.skus.find(s=>s.risk==="Critical")||brand?.skus[0]
+    const reorder  = stream.pendingReorders[0]
+    const qty      = reorder?.qty ?? agentReorderQty
     const supplier = agentSupplierName || brand?.supplier || "Supplier"
     const now      = new Date()
     const timeStr  = now.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})
     const dateStr  = now.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})
-    const eta      = new Date(now.getTime()+leadDays*24*60*60*1000).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})
 
     setAuditRows(prev=>[{time:`Today ${timeStr}`,action:`Reorder approved · ${critSku?.name||""} · ${qty} units → ${supplier}`,sku:critSku?.id||"",label:"Sent"},...prev])
 
     if(critSku){
       setOrders(prev=>{
         const ref=`PO-${now.getFullYear()}-${String(prev.length+1).padStart(3,"0")}`
-        return [{ref,sku:critSku.name,skuId:critSku.id,supplier,supplierEmail:agentSupplierEmail,qty,orderDate:dateStr,eta,status:"sent" as const},...prev]
+        return [{ref,sku:critSku.name,skuId:critSku.id,supplier,supplierEmail:agentSupplierEmail,qty,orderDate:dateStr,eta:dateStr,status:"sent" as const},...prev]
       })
     }
-  },[stream, brand, liveSkus, agentSupplierEmail, agentSupplierName])
+  },[stream, brand, agentReorderQty, agentSupplierEmail, agentSupplierName])
 
   const handleCancel = useCallback(()=>{
     if(cdInt.current)clearInterval(cdInt.current)

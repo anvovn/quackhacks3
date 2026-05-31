@@ -12,7 +12,6 @@ export interface PendingReorder {
   name: string
   qty: number
   supplier: string
-  lead_time_days: number
   created_at: number
 }
 
