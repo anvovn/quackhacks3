@@ -29,10 +29,15 @@ interface Supplier {
   since?: string; tags?: string[]; notes?: string
   onTimeRate?: number; totalOrders?: number; lastOrder?: string
 }
-interface Invoice {
-  ref: string; supplier: string; supplierEmail: string; desc: string
-  amount: string; amountRaw: number; due: string
-  status: "due-soon" | "upcoming" | "paid"; payable: boolean; paid: boolean
+interface PurchaseOrder {
+  ref: string; sku: string; skuId: string; supplier: string; supplierEmail: string
+  qty: number; orderDate: string; eta: string
+  status: "sent" | "confirmed" | "in-transit" | "received"
+}
+interface Inbound {
+  ref: string; poRef: string; sku: string; skuId: string; supplier: string
+  units: number; orderDate: string; eta: string; tracking: string
+  status: "awaiting-shipment" | "in-transit" | "delivered"
 }
 interface ShopifyOrder {
   id: string; customer: string; email: string; sku: string; skuCode: string
@@ -569,62 +574,63 @@ function SuppliersSection({suppliers, onAdd, onGoToInbounds}:{suppliers:Supplier
   )
 }
 
-function InvoicesSection({invoices: initInvoices}:{invoices:Invoice[]}) {
-  const [invoices, setInvoices] = useState(initInvoices)
-  const [scheduled, setScheduled] = useState<Set<string>>(new Set())
+function SupplierOrdersSection({orders: init}:{orders:PurchaseOrder[]}) {
+  const [orders, setOrders] = useState(init)
+  useEffect(()=>setOrders(init),[init])
 
-  useEffect(()=>setInvoices(initInvoices),[initInvoices])
+  const pillType = (s:PurchaseOrder["status"]):React.ComponentProps<typeof StatusPill>["type"] =>
+    s==="received"?"live":s==="in-transit"?"transit":s==="confirmed"?"pending":"draft"
+  const pillLabel = (s:PurchaseOrder["status"]) =>
+    s==="received"?"Received":s==="in-transit"?"In Transit":s==="confirmed"?"Confirmed":"Sent"
 
-  function payInvoice(ref:string) {
-    setInvoices(prev=>prev.map(inv=>inv.ref===ref?{...inv,paid:true,status:"paid" as const}:inv))
+  const nextStatus:{[k in PurchaseOrder["status"]]:PurchaseOrder["status"]} = {
+    "sent":"confirmed","confirmed":"in-transit","in-transit":"received","received":"received"
   }
-  function scheduleInvoice(ref:string) {
-    setScheduled(prev=>new Set([...prev,ref]))
+  const nextLabel = (s:PurchaseOrder["status"]) =>
+    s==="sent"?"Mark Confirmed":s==="confirmed"?"Mark In Transit":s==="in-transit"?"Mark Received":""
+
+  function advance(ref:string) {
+    setOrders(prev=>prev.map(po=>po.ref===ref?{...po,status:nextStatus[po.status]}:po))
   }
-
-  const dueColor = (inv:Invoice) => inv.paid?"var(--muted)":inv.status==="due-soon"?"var(--red)":"var(--amber)"
-  const statusLabel = (inv:Invoice) => inv.paid?"Paid":inv.status==="due-soon"?"Due Soon":scheduled.has(inv.ref)?"Scheduled":"Upcoming"
-  const statusType  = (inv:Invoice):React.ComponentProps<typeof StatusPill>["type"] =>
-    inv.paid?"live":inv.status==="due-soon"?"pending":scheduled.has(inv.ref)?"pending":"draft"
-
-  const outstanding = invoices.filter(inv=>!inv.paid).reduce((s,inv)=>s+inv.amountRaw,0)
 
   return (
     <>
-      <SectionHeader eyebrow="// payments" title="Supplier Payments"
-        action={outstanding>0?<div style={{...S.mono,fontSize:12,color:"var(--muted)"}}>Outstanding: <span style={{color:"var(--amber)",fontWeight:500}}>${outstanding.toLocaleString()}</span></div>:undefined}/>
+      <SectionHeader eyebrow="// supplier orders" title="Supplier Orders"/>
       <Panel>
-        {invoices.length===0?(
+        {orders.length===0?(
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"48px 0",gap:10}}>
-            <div style={{fontSize:28}}>💳</div>
-            <div style={{...S.display,fontSize:15,fontWeight:700}}>No payments yet</div>
+            <div style={{fontSize:28}}>📋</div>
+            <div style={{...S.display,fontSize:15,fontWeight:700}}>No supplier orders yet</div>
             <div style={{...S.mono,fontSize:11,color:"var(--muted)",textAlign:"center" as const,maxWidth:340,lineHeight:1.7}}>
-              Payments appear here when ChainAgent emails a supplier and they confirm.<br/>
-              Run the agent and approve a reorder to get started.
+              Purchase orders appear here when ChainAgent emails a supplier and you approve the reorder.
             </div>
           </div>
         ):(<>
-        <RowHead cols="1fr 100px 110px 110px 110px"><Th>Reference</Th><Th>Amount</Th><Th>Due Date</Th><Th>Status</Th><Th>Action</Th></RowHead>
-        {invoices.map((inv,i)=>(
-          <div key={inv.ref} style={{display:"grid",gridTemplateColumns:"1fr 100px 110px 110px 110px",gap:10,padding:"13px 18px",borderBottom:i<invoices.length-1?"1px solid var(--border)":"none",alignItems:"center",opacity:inv.paid?0.55:1}}>
-            <div>
-              <div style={{fontSize:12,fontWeight:500,color:"var(--text)"}}>{inv.ref} · {inv.supplier}</div>
-              <div style={{...S.mono,fontSize:9,color:"var(--muted)"}}>{inv.desc}</div>
+          <RowHead cols="110px 1fr 1fr 60px 110px 110px 110px 120px">
+            <Th>PO Ref</Th><Th>SKU</Th><Th>Supplier</Th><Th>Qty</Th><Th>Order Date</Th><Th>ETA</Th><Th>Status</Th><Th>Action</Th>
+          </RowHead>
+          {orders.map((po,i)=>(
+            <div key={po.ref} style={{display:"grid",gridTemplateColumns:"110px 1fr 1fr 60px 110px 110px 110px 120px",gap:10,padding:"12px 18px",borderBottom:i<orders.length-1?"1px solid var(--border)":"none",alignItems:"center",background:po.status==="received"?"rgba(0,229,160,0.02)":"transparent"}}>
+              <div style={{...S.mono,fontSize:11,fontWeight:500,color:"var(--text)"}}>{po.ref}</div>
+              <div>
+                <div style={{fontSize:12,color:"var(--text)"}}>{po.sku}</div>
+                <div style={{...S.mono,fontSize:9,color:"var(--muted)"}}>{po.skuId}</div>
+              </div>
+              <div>
+                <div style={{fontSize:12,color:"var(--text)"}}>{po.supplier}</div>
+                {po.supplierEmail&&<div style={{...S.mono,fontSize:9,color:"var(--muted)"}}>{po.supplierEmail}</div>}
+              </div>
+              <div style={{...S.mono,fontSize:12}}>{po.qty.toLocaleString()}</div>
+              <div style={{...S.mono,fontSize:11,color:"var(--muted)"}}>{po.orderDate}</div>
+              <div style={{...S.mono,fontSize:11,color:po.status==="received"?"var(--accent)":"var(--text)"}}>{po.eta}</div>
+              <StatusPill label={pillLabel(po.status)} type={pillType(po.status)}/>
+              {po.status!=="received"?(
+                <Btn style={{fontSize:10,padding:"4px 10px"}} onClick={()=>advance(po.ref)}>{nextLabel(po.status)}</Btn>
+              ):(
+                <div style={{...S.mono,fontSize:10,color:"var(--accent)"}}>✓ Complete</div>
+              )}
             </div>
-            <div style={{...S.mono,fontSize:13,fontWeight:500,color:inv.paid?"var(--muted)":"var(--text)"}}>{inv.amount}</div>
-            <div style={{...S.mono,fontSize:11,color:dueColor(inv)}}>{inv.due}</div>
-            <StatusPill label={statusLabel(inv)} type={statusType(inv)}/>
-            {inv.paid?(
-              <Btn style={{fontSize:11,padding:"6px 14px",cursor:"default",opacity:0.5}}>Receipt</Btn>
-            ):inv.status==="due-soon"&&!scheduled.has(inv.ref)?(
-              <Btn variant="primary" style={{fontSize:11,padding:"6px 14px"}} onClick={()=>payInvoice(inv.ref)}>Pay Now</Btn>
-            ):scheduled.has(inv.ref)?(
-              <Btn style={{fontSize:11,padding:"6px 14px",cursor:"default",opacity:0.7}}>Scheduled ✓</Btn>
-            ):(
-              <Btn style={{fontSize:11,padding:"6px 14px"}} onClick={()=>scheduleInvoice(inv.ref)}>Schedule</Btn>
-            )}
-          </div>
-        ))}
+          ))}
         </>)}
       </Panel>
     </>
@@ -886,7 +892,7 @@ function AgentSection({brand,supplierEmail,supplierName,agentRunning,trace,showE
       </div>
       {showEmail&&(
         <div className="email-panel" style={{background:"var(--surface)",border:"1px solid var(--border)",borderLeft:"3px solid var(--accent)",borderRadius:14,overflow:"hidden"}}>
-          <PanelHeader title={<>📧 Drafted Supplier Email <BeHook>← claude_draft.py</BeHook></>}/>
+          <PanelHeader title={<>📧 Drafted Supplier Email</>}/>
           <div style={{padding:"12px 18px",borderBottom:"1px solid var(--border)"}}>
             <div style={{display:"flex",gap:10,...S.mono,fontSize:12,padding:"4px 0"}}>
               <span style={{color:"var(--muted)",minWidth:55}}>To:</span>
@@ -958,7 +964,8 @@ export default function Dashboard() {
   const [liveSkus, setLiveSkus]   = useState<RawSKU[] | "error" | null>(null)
   const [auditRows, setAuditRows] = useState<AuditRow[]>([])
   const [suppliers,        setSuppliers]        = useState<Supplier[]>([]) // populated by SuppliersSection internally
-  const [invoices,         setInvoices]         = useState<Invoice[]>([])
+  const [orders,           setOrders]           = useState<PurchaseOrder[]>([])
+  const [inbounds,         setInbounds]         = useState<Inbound[]>([])
   const [shopifyOrders,    setShopifyOrders]    = useState<ShopifyOrder[]>([])
   const [shopifyConnected, setShopifyConnected] = useState<boolean|null>(null)
   const cdInt = useRef<ReturnType<typeof setInterval>|null>(null)
@@ -1056,14 +1063,12 @@ export default function Dashboard() {
     return ()=>clearInterval(t)
   },[scheduleOn])
 
-  // When supplier replies → confirm the pending payment and log it
+  // When supplier replies → confirm the pending PO
   useEffect(()=>{
     if(!showReply) return
-    setInvoices(prev=>prev.map((inv,i)=>
-      i===0&&inv.status==="upcoming"?{...inv,status:"due-soon" as const,payable:true,desc:inv.desc+" · Supplier confirmed"}:inv
-    ))
+    setOrders(prev=>prev.map((po,i)=>i===0&&po.status==="sent"?{...po,status:"confirmed" as const}:po))
     const now=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})
-    setAuditRows(prev=>[{time:`Today ${now}`,action:`Supplier confirmed reorder · invoice pending`,sku:brand?.skus[0]?.id||"",label:"Created"},...prev])
+    setAuditRows(prev=>[{time:`Today ${now}`,action:"Supplier confirmed reorder · shipment pending",sku:brand?.skus[0]?.id||"",label:"Created"},...prev])
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[showReply])
 
@@ -1090,19 +1095,29 @@ export default function Dashboard() {
   const handleApprove = useCallback(()=>{
     if(cdInt.current)clearInterval(cdInt.current)
     stream.approve()
-    const now=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})
-    const critSku=brand?.skus.find(s=>s.risk==="Critical")||brand?.skus[0]
-    setAuditRows(prev=>[{time:`Today ${now}`,action:"Reorder approved & sent · via ChainAgent",sku:critSku?.id||"",label:"Sent"},...prev])
+    const critSku = brand?.skus.find(s=>s.risk==="Critical")||brand?.skus[0]
+    const rawSku  = Array.isArray(liveSkus)?liveSkus.find(s=>s.id===critSku?.id||s.name===critSku?.name):null
+    const leadDays = rawSku?.lead_time_days ?? 21
+    const qty      = rawSku?.reorder_qty ?? 500
+    const supplier = rawSku?.supplier_name || agentSupplierName || brand?.supplier || "Supplier"
+    const now      = new Date()
+    const timeStr  = now.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})
+    const dateStr  = now.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})
+    const eta      = new Date(now.getTime()+leadDays*24*60*60*1000).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})
+
+    setAuditRows(prev=>[{time:`Today ${timeStr}`,action:`Reorder approved · ${critSku?.name||""} · ${qty} units → ${supplier}`,sku:critSku?.id||"",label:"Sent"},...prev])
+
     if(critSku){
-      const due=new Date(Date.now()+30*24*60*60*1000).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})
-      setInvoices(prev=>[{
-        ref:`INV-${new Date().getFullYear()}-${String(prev.length+42).padStart(3,"0")}`,
-        supplier:brand?.supplier||"Supplier",supplierEmail:brand?.email||"",
-        desc:`${critSku.name} reorder`,amount:"$10,000",amountRaw:10000,
-        due,status:"due-soon" as const,payable:true,paid:false,
-      },...prev])
+      setOrders(prev=>{
+        const ref=`PO-${now.getFullYear()}-${String(prev.length+1).padStart(3,"0")}`
+        setInbounds(ib=>{
+          const inbRef=`INB-${now.getFullYear()}-${String(ib.length+1).padStart(3,"0")}`
+          return [{ref:inbRef,poRef:ref,sku:critSku.name,skuId:critSku.id,supplier,units:qty,orderDate:dateStr,eta,tracking:"Pending",status:"awaiting-shipment" as const},...ib]
+        })
+        return [{ref,sku:critSku.name,skuId:critSku.id,supplier,supplierEmail:agentSupplierEmail,qty,orderDate:dateStr,eta,status:"sent" as const},...prev]
+      })
     }
-  },[stream, brand, setInvoices])
+  },[stream, brand, liveSkus, agentSupplierEmail, agentSupplierName])
 
   const handleCancel = useCallback(()=>{
     if(cdInt.current)clearInterval(cdInt.current)
@@ -1225,7 +1240,7 @@ export default function Dashboard() {
                 {items.map(item=>(
                   <button key={item.id} id={`nav-${item.id}`} onClick={()=>setSection(item.id)} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 10px",borderRadius:8,cursor:"pointer",transition:"all 0.15s",color:section===item.id?"var(--accent)":"var(--muted2)",fontSize:13,border:section===item.id?"1px solid var(--accent-mid)":"none",background:section===item.id?"var(--accent-dim)":"none",width:"100%",textAlign:"left" as const}}>
                     <span style={{width:15,textAlign:"center" as const,flexShrink:0,fontSize:13}}>{item.icon}</span>
-                    {item.label==="Monitor"?["Overview","Run Agent","Inventory","Stock Inbounds","Orders"][navItems.findIndex(n=>n.id===item.id)]:["Suppliers","Payments","Audit Log","Notifications","Settings"][navItems.filter(n=>n.label==="Manage").findIndex(n=>n.id===item.id)]}
+                    {item.label==="Monitor"?["Overview","Run Agent","Inventory","Stock Inbounds","Orders"][navItems.findIndex(n=>n.id===item.id)]:["Suppliers","Supplier Orders","Audit Log","Notifications","Settings"][navItems.filter(n=>n.label==="Manage").findIndex(n=>n.id===item.id)]}
                     {item.badge&&<span style={{marginLeft:"auto",...S.mono,fontSize:9,padding:"2px 6px",borderRadius:100,background:item.badgeColor==="red"?"var(--red-dim)":item.badgeColor==="green"?"var(--accent-dim)":"var(--amber-dim)",color:item.badgeColor==="red"?"var(--red)":item.badgeColor==="green"?"var(--accent)":"var(--amber)"}}>{item.badge}</span>}
                   </button>
                 ))}
@@ -1278,7 +1293,17 @@ export default function Dashboard() {
             ) : (
               <>
                 {section==="overview"  &&<OverviewSection brand={brand} onRunAgent={()=>{setSection("agent");setTimeout(handleRunAgent,200)}} onViewAllReorders={()=>setSection("logs")}/>}
-                {section==="agent"     &&<AgentSection brand={brand} supplierEmail={agentSupplierEmail} supplierName={agentSupplierName} agentRunning={agentRunning} trace={stream.trace} showEmail={showEmail} emailResult={emailResult} showReply={showReply} cdVal={fmt(cdSecs)} onRun={handleRunAgent} onReset={handleReset} onApprove={handleApprove} onCancel={handleCancel} emailContent={stream.emailContent}/>}
+                {section==="agent"     &&(suppliers.length===0?(
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:320,gap:12}}>
+                    <div style={{fontSize:28}}>◉</div>
+                    <div style={{...S.display,fontSize:16,fontWeight:700}}>Add a supplier first</div>
+                    <div style={{...S.mono,fontSize:11,color:"var(--muted)",textAlign:"center" as const,maxWidth:320,lineHeight:1.7}}>
+                      The agent needs a supplier contact to send the reorder email.<br/>
+                      Add one in the Suppliers tab, then come back.
+                    </div>
+                    <Btn variant="primary" onClick={()=>setSection("suppliers")}>Go to Suppliers →</Btn>
+                  </div>
+                ):<AgentSection brand={brand} supplierEmail={agentSupplierEmail} supplierName={agentSupplierName} agentRunning={agentRunning} trace={stream.trace} showEmail={showEmail} emailResult={emailResult} showReply={showReply} cdVal={fmt(cdSecs)} onRun={handleRunAgent} onReset={handleReset} onApprove={handleApprove} onCancel={handleCancel} emailContent={stream.emailContent}/>)}
                 {section==="inventory" &&<InventorySection brand={brand}/>}
                 {section==="inbounds"  &&<InboundsSection reorders={pendingReorders} onReceive={r => { removeReorder(r.id); handleResync() }}/>}
                 {section==="orders"    &&<OrdersSection orders={shopifyOrders}/>}
@@ -1286,7 +1311,7 @@ export default function Dashboard() {
             )
           )}
           {section==="suppliers" && (shopifyConnected===null?null:shopifyConnected===false?<ShopifyGate onSettings={()=>setSection("settings")}/>:<SuppliersSection suppliers={suppliers} onAdd={s=>setSuppliers(prev=>[...prev,s])} onGoToInbounds={()=>setSection("inbounds")}/>)}
-          {section==="invoices"  && <InvoicesSection invoices={invoices}/>}
+          {section==="invoices"  && <SupplierOrdersSection orders={orders}/>}
           {section==="logs"        &&<LogsSection auditRows={auditRows}/>}
           {section==="notifications"&&<NotificationsSection/>}
           {section==="settings"    &&<SettingsSection/>}

@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "skus.json"
+SUPPLEMENT_PATH = Path(__file__).resolve().parents[1] / "data" / "sku-supplement.json"
 
 
 def get_gemini_client():
@@ -36,15 +36,16 @@ def parse_supplier_pdf(pdf_path, sku_id):
         raise RuntimeError("Gemini returned an empty response")
     extracted = json.loads(text.strip())
 
-    # update skus.json with new lead time
-    with DATA_PATH.open() as f:
-        skus = json.load(f)
+    # update sku-supplement.json with new lead time
+    try:
+        supplement = json.loads(SUPPLEMENT_PATH.read_text())
+    except Exception:
+        supplement = {}
 
-    for sku in skus:
-        if sku["id"] == sku_id:
-            sku["lead_time_days"] = extracted["lead_time_days"]
+    if sku_id not in supplement:
+        supplement[sku_id] = {}
+    supplement[sku_id]["lead_time_days"] = extracted["lead_time_days"]
 
-    with DATA_PATH.open("w") as f:
-        json.dump(skus, f, indent=2)
+    SUPPLEMENT_PATH.write_text(json.dumps(supplement, indent=2))
 
     return extracted

@@ -1,16 +1,13 @@
 import asyncio
 import json
 import threading
-from pathlib import Path
 
 from fastapi import FastAPI
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-from agent.chain_agent import run_agent, adjust_shopify_inventory
-
-DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "skus.json"
+from agent.chain_agent import run_agent, adjust_shopify_inventory, load_skus
 
 # ---------------------------------------------------------------------------
 # App
@@ -140,6 +137,5 @@ def receive_reorder(body: ReceiveBody):
 
 @app.get("/skus")
 async def get_skus():
-    """Return the SKU list from data/skus.json."""
-    with DATA_PATH.open() as f:
-        return json.load(f)
+    """Return the SKU list from Shopify."""
+    return load_skus()
