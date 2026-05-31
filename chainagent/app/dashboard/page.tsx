@@ -91,6 +91,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 @keyframes flicker{0%,100%{opacity:1}50%{opacity:0.5}}
 @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 @keyframes slideUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 .live-dot{animation:pulse-dot 2s infinite}
 .sync-dot{animation:pulse-dot 3s infinite}
 .agent-dot{animation:pulse-dot 1.5s infinite}
@@ -204,6 +205,37 @@ function BeHook({children}:{children:string}) {
   return <span style={{...S.mono,fontSize:9,color:"var(--blue)",background:"var(--blue-dim)",padding:"2px 7px",borderRadius:4,marginLeft:8}}>{children}</span>
 }
 
+function RefreshBtn({onClick}:{onClick?:()=>void}) {
+  const [phase, setPhase] = useState<"idle"|"loading"|"done">("idle")
+  function handleClick() {
+    if (phase !== "idle") return
+    setPhase("loading")
+    onClick?.()
+    setTimeout(() => {
+      setPhase("done")
+      setTimeout(() => setPhase("idle"), 1200)
+    }, 900)
+  }
+  const styles: Record<string, React.CSSProperties> = {
+    idle:    { background:"var(--surface)", color:"var(--muted2)", border:"1px solid var(--border2)" },
+    loading: { background:"var(--accent-dim)", color:"var(--accent)", border:"1px solid var(--accent-mid)" },
+    done:    { background:"rgba(34,197,94,0.12)", color:"#4ade80", border:"1px solid rgba(34,197,94,0.25)" },
+  }
+  const base: React.CSSProperties = {...S.mono,fontSize:11,fontWeight:500,letterSpacing:"0.04em",padding:"7px 13px",borderRadius:7,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6,transition:"background 0.2s, color 0.2s, border-color 0.2s"}
+  return (
+    <button style={{...base,...styles[phase]}} onClick={handleClick}>
+      {phase === "done" ? (
+        <span style={{fontSize:12}}>✓</span>
+      ) : (
+        <span style={{display:"inline-block", animation: phase==="loading" ? "spin 0.7s linear infinite" : "none"}}>↻</span>
+      )}
+      {phase === "idle"    && "Refresh"}
+      {phase === "loading" && "Refreshing…"}
+      {phase === "done"    && "Updated"}
+    </button>
+  )
+}
+
 function SectionHeader({eyebrow,title,hook,action}:{eyebrow?:string,title:string,hook?:string,action?:React.ReactNode}) {
   return (
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
@@ -217,7 +249,7 @@ function SectionHeader({eyebrow,title,hook,action}:{eyebrow?:string,title:string
 }
 
 // ── SECTION COMPONENTS ──
-function OverviewSection({brand,onRunAgent}:{brand:Brand,onRunAgent:()=>void}) {
+function OverviewSection({brand,onRunAgent,onViewAllReorders}:{brand:Brand,onRunAgent:()=>void,onViewAllReorders:()=>void}) {
   return (
     <>
       <SectionHeader eyebrow={`// overview · ${brand.name}`} title="Supply Chain Dashboard" action={<Btn variant="primary" onClick={onRunAgent}>▶ Run Agent Now</Btn>}/>
@@ -239,7 +271,7 @@ function OverviewSection({brand,onRunAgent}:{brand:Brand,onRunAgent:()=>void}) {
         ))}
       </div>
       <Panel>
-        <PanelHeader title={<>📊 Live SKU Risk Monitor <BeHook>← /api/inventory</BeHook></>} actions={<><Btn onClick={()=>{}}>↻ Refresh</Btn><Btn variant="primary" onClick={onRunAgent}>▶ Run Agent</Btn></>}/>
+        <PanelHeader title={<>📊 Live SKU Risk Monitor <BeHook>← /api/inventory</BeHook></>} actions={<><RefreshBtn/><Btn variant="primary" onClick={onRunAgent}>▶ Run Agent</Btn></>}/>
         <RowHead cols="2fr 70px 85px 75px 120px 95px 105px"><Th>Product</Th><Th>Stock</Th><Th>Incoming</Th><Th>Velocity</Th><Th>Runway</Th><Th>Risk</Th><Th>Agent</Th></RowHead>
         {brand.skus.map(sku=><SkuRow key={sku.id} sku={sku} cols="2fr 70px 85px 75px 120px 95px 105px" isOverview/>)}
       </Panel>
@@ -264,7 +296,7 @@ function OverviewSection({brand,onRunAgent}:{brand:Brand,onRunAgent:()=>void}) {
           </div>
         </Panel>
         <Panel>
-          <PanelHeader title="📦 Reorder History" actions={<Btn onClick={()=>{}}>View all →</Btn>}/>
+          <PanelHeader title="📦 Reorder History" actions={<Btn onClick={onViewAllReorders}>View all →</Btn>}/>
           {[
             {name:`${brand.skus[1]?.name||""} · 800u`,sub:"Pending approval · $10,000",status:<StatusPill label="Pending" type="pending"/>,date:"Today"},
             {name:`${brand.skus[0]?.name||""} · 500u`,sub:"May 14 · $5,000",status:<StatusPill label="Delivered" type="live"/>,date:"May 28"},
@@ -685,6 +717,7 @@ export default function Dashboard() {
   const [brandId, setBrandId]     = useState("focal")
   const [brandDDOpen, setBrandDD] = useState(false)
   const [syncSecs, setSyncSecs]   = useState(0)
+  const [syncPhase, setSyncPhase] = useState<"idle"|"syncing"|"done">("idle")
   const [scheduleSecs, setScheduleSecs] = useState(7200)
   const [scheduleOn, setScheduleOn]     = useState(true)
   const [cdSecs, setCdSecs]       = useState(7200)
@@ -805,6 +838,17 @@ export default function Dashboard() {
     if(cdInt.current)clearInterval(cdInt.current)
   },[stream])
 
+  const handleResync = useCallback(()=>{
+    if (syncPhase !== "idle") return
+    setSyncPhase("syncing")
+    setSyncSecs(0)
+    fetch("/api/skus").then(r=>r.json()).then((data: RawSKU[])=>setLiveSkus(data)).catch(()=>{})
+    setTimeout(()=>{
+      setSyncPhase("done")
+      setTimeout(()=>setSyncPhase("idle"), 1200)
+    }, 1200)
+  },[syncPhase])
+
   const navItems = [
     {id:"overview",icon:"◈",label:"Monitor"},
     {id:"agent",   icon:"⚡",label:"Monitor",badge:"1 alert",badgeColor:"red"},
@@ -832,9 +876,45 @@ export default function Dashboard() {
           <span className="live-dot" style={{width:7,height:7,borderRadius:"50%",background:"var(--accent)",display:"inline-block"}}/>ChainAgent
         </a>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{display:"flex",alignItems:"center",gap:6,...S.mono,fontSize:10,color:"var(--muted)",padding:"4px 10px",background:"var(--surface2)",borderRadius:100,border:"1px solid var(--border)"}}>
-            <span className="sync-dot" style={{width:5,height:5,borderRadius:"50%",background:"var(--accent)",display:"inline-block"}}/>
-            {syncSecs<60?`synced ${syncSecs}s ago`:`synced ${Math.floor(syncSecs/60)}m ago`}
+          {/* Sync pill + Resync button */}
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,...S.mono,fontSize:10,
+              color: syncPhase==="syncing"?"var(--accent)": syncPhase==="done"?"#4ade80":"var(--muted)",
+              padding:"4px 10px",
+              background: syncPhase==="syncing"?"var(--accent-dim)": syncPhase==="done"?"rgba(34,197,94,0.1)":"var(--surface2)",
+              borderRadius:100,
+              border: syncPhase==="syncing"?"1px solid var(--accent-mid)": syncPhase==="done"?"1px solid rgba(34,197,94,0.25)":"1px solid var(--border)",
+              transition:"all 0.2s"
+            }}>
+              {syncPhase==="syncing" ? (
+                <span style={{display:"inline-block",animation:"spin 0.7s linear infinite"}}>↻</span>
+              ) : syncPhase==="done" ? (
+                <span>✓</span>
+              ) : (
+                <span className="sync-dot" style={{width:5,height:5,borderRadius:"50%",background:"var(--accent)",display:"inline-block"}}/>
+              )}
+              {syncPhase==="syncing" && "Syncing…"}
+              {syncPhase==="done"    && "Synced"}
+              {syncPhase==="idle"    && (syncSecs<60?`synced ${syncSecs}s ago`:`synced ${Math.floor(syncSecs/60)}m ago`)}
+            </div>
+            <button
+              onClick={handleResync}
+              title="Resync data"
+              style={{
+                ...S.mono, fontSize:10, fontWeight:500,
+                padding:"4px 10px", borderRadius:100,
+                border:"1px solid var(--border2)",
+                background:"var(--surface2)",
+                color: syncPhase==="idle" ? "var(--muted2)" : "var(--muted)",
+                cursor: syncPhase==="idle" ? "pointer" : "default",
+                display:"flex", alignItems:"center", gap:5,
+                transition:"all 0.15s",
+                opacity: syncPhase==="idle" ? 1 : 0.5,
+              }}
+            >
+              <span style={{display:"inline-block", animation: syncPhase==="syncing" ? "spin 0.7s linear infinite" : "none"}}>↻</span>
+              Resync
+            </button>
           </div>
           <div style={{position:"relative",display:"flex",alignItems:"center",gap:8,background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:8,padding:"6px 12px",cursor:"pointer",...S.mono,fontSize:11,color:"var(--text)"}} onClick={()=>setBrandDD(!brandDDOpen)}>
             🏷 {brand.label} <span style={{color:"var(--muted)",fontSize:10}}>▾</span>
@@ -905,7 +985,7 @@ export default function Dashboard() {
 
         {/* MAIN */}
         <main style={{padding:"22px 26px",display:"flex",flexDirection:"column",gap:16,overflow:"hidden"}}>
-          {section==="overview"    &&<OverviewSection brand={brand} onRunAgent={()=>{setSection("agent");setTimeout(handleRunAgent,200)}}/>}
+          {section==="overview"    &&<OverviewSection brand={brand} onRunAgent={()=>{setSection("agent");setTimeout(handleRunAgent,200)}} onViewAllReorders={()=>setSection("logs")}/>}
           {section==="agent"       &&<AgentSection brand={brand} agentRunning={agentRunning} trace={stream.trace} showEmail={showEmail} emailResult={emailResult} showReply={showReply} cdVal={fmt(cdSecs)} onRun={handleRunAgent} onReset={handleReset} onApprove={handleApprove} onCancel={handleCancel} emailContent={stream.emailContent}/>}
           {section==="inventory"   &&<InventorySection brand={brand}/>}
           {section==="inbounds"    &&<InboundsSection brand={brand}/>}

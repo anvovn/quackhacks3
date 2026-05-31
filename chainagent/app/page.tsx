@@ -296,9 +296,9 @@ export default function Home() {
           You stay in control. It does the work.
         </p>
         <div className="hero-actions">
-          <button className="btn-primary" onClick={() => document.getElementById('cta')?.scrollIntoView({ behavior: 'smooth' })}>
-            Request early access
-          </button>
+          <Link href="/login" className="btn-primary" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+            Open dashboard →
+          </Link>
           <button className="btn-secondary" onClick={() => document.getElementById('terminal')?.scrollIntoView({ behavior: 'smooth' })}>
             See the agent run →
           </button>
