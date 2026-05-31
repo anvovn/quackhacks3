@@ -242,7 +242,7 @@ function OverviewSection({brand,orders,onRunAgent,onViewAllReorders}:{brand:Bran
             </div>
           ):orders.slice(0,3).map((po,i)=>(
             <div key={po.ref} style={{display:"grid",gridTemplateColumns:"1fr 90px 60px",gap:8,padding:"11px 18px",borderBottom:i<Math.min(orders.length,3)-1?"1px solid var(--border)":"none",fontSize:12,alignItems:"center"}}>
-              <div><div style={{fontSize:12,fontWeight:500,color:"var(--text)"}}>{po.sku} · {po.qty.toLocaleString()}u</div><div style={{...S.mono,fontSize:9,color:"var(--muted)"}}>{po.supplier} · {po.orderDate}</div></div>
+              <div><div style={{fontSize:12,fontWeight:500,color:"var(--text)"}}>{po.sku} · {(po.qty??0).toLocaleString()}u</div><div style={{...S.mono,fontSize:9,color:"var(--muted)"}}>{po.supplier} · {po.orderDate}</div></div>
               <StatusPill label={po.status==="received"?"Received":po.status==="in-transit"?"In Transit":po.status==="confirmed"?"Confirmed":"Sent"} type={po.status==="received"?"live":po.status==="in-transit"?"transit":"draft"}/>
               <span style={{...S.mono,fontSize:10,color:"var(--muted)"}}>{po.ref}</span>
             </div>
@@ -342,7 +342,7 @@ function InboundsSection({reorders, onReceive}: {reorders: PendingReorder[], onR
                   <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between"}}>
                     <div>
                       <div style={{fontSize:14,fontWeight:600,color:"var(--text)"}}>{r.name}</div>
-                      <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginTop:2}}>{r.supplier} · {r.qty.toLocaleString()} units ordered</div>
+                      <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginTop:2}}>{r.supplier||"—"} · {(r.qty??0).toLocaleString()} units ordered</div>
                     </div>
                     <StatusPill label="In Transit" type="transit"/>
                   </div>
@@ -359,7 +359,7 @@ function InboundsSection({reorders, onReceive}: {reorders: PendingReorder[], onR
                     <Btn variant="primary" style={{fontSize:11,padding:"7px 16px"}} onClick={() => handleReceive(r)}>
                       {isReceiving ? "Receiving…" : "✓ Mark as Received"}
                     </Btn>
-                    <div style={{...S.mono,fontSize:10,color:"var(--muted)"}}>Clicking will add {r.qty.toLocaleString()} units to Shopify inventory</div>
+                    <div style={{...S.mono,fontSize:10,color:"var(--muted)"}}>Clicking will add {(r.qty??0).toLocaleString()} units to Shopify inventory</div>
                   </div>
                 </div>
               </Panel>
@@ -607,7 +607,7 @@ function OrderHistorySection({orders: initOrders, auditRows, pendingReorders}:{o
               <div style={{...S.mono,fontSize:11,color:"var(--text)"}}>{po.ref}</div>
               <div><div style={{fontSize:12,color:"var(--text)"}}>{po.sku}</div><div style={{...S.mono,fontSize:9,color:"var(--muted)"}}>{po.skuId}</div></div>
               <div><div style={{fontSize:12,color:"var(--text)"}}>{po.supplier}</div>{po.supplierEmail&&<div style={{...S.mono,fontSize:9,color:"var(--muted)"}}>{po.supplierEmail}</div>}</div>
-              <div style={{...S.mono,fontSize:12}}>{po.qty.toLocaleString()}</div>
+              <div style={{...S.mono,fontSize:12}}>{(po.qty??0).toLocaleString()}</div>
               <div style={{...S.mono,fontSize:11,color:"var(--muted)"}}>{po.orderDate}</div>
               <StatusPill label={pillLabel(po.status)} type={pillType(po.status)}/>
               {po.status!=="received"
@@ -627,7 +627,7 @@ function OrderHistorySection({orders: initOrders, auditRows, pendingReorders}:{o
             <div key={r.id} style={{display:"grid",gridTemplateColumns:"1fr 1fr 80px",gap:10,padding:"12px 18px",borderBottom:i<pendingReorders.length-1?"1px solid var(--border)":"none",alignItems:"center"}}>
               <div style={{fontSize:12,color:"var(--text)"}}>{r.name}</div>
               <div style={{...S.mono,fontSize:11,color:"var(--muted)"}}>{r.supplier}</div>
-              <div style={{...S.mono,fontSize:12}}>{r.qty.toLocaleString()}</div>
+              <div style={{...S.mono,fontSize:12}}>{(r.qty??0).toLocaleString()}</div>
             </div>
           ))}
         </Panel>
