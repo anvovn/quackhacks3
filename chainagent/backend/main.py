@@ -2,14 +2,31 @@ import asyncio
 import json
 import os
 import threading
+from pathlib import Path
 
 from fastapi import FastAPI
+from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from agent.chain_agent import run_agent
 
 _allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+
+DATA_DIR     = Path(__file__).resolve().parents[1] / "data"
+EMAIL_CONFIG = DATA_DIR / "email-config.json"
+
+
+def _read_email_config() -> dict:
+    try:
+        return json.loads(EMAIL_CONFIG.read_text())
+    except Exception:
+        return {"enabled": False, "email": ""}
+
+
+def _write_email_config(cfg: dict) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    EMAIL_CONFIG.write_text(json.dumps(cfg, indent=2))
 
 # ---------------------------------------------------------------------------
 # App
@@ -121,4 +138,49 @@ async def stream():
                 await asyncio.sleep(0.1)
 
     return StreamingResponse(generator(), media_type="text/event-stream")
+
+
+class EmailConfigBody(BaseModel):
+    enabled: bool
+    email: str
+
+
+@app.get("/email-config")
+def get_email_config():
+    return _read_email_config()
+
+
+@app.post("/email-config")
+def save_email_config(body: EmailConfigBody):
+    cfg = {"enabled": body.enabled, "email": body.email.strip()}
+    _write_email_config(cfg)
+    return {"status": "saved", **cfg}
+
+
+@app.post("/email-test")
+def send_test_email():
+    from agent.twilio_email import SENDGRID_API_KEY, EMAIL_FROM, _send
+    import urllib.error
+    cfg = _read_email_config()
+    to_email = cfg.get("email", "").strip()
+    if not to_email:
+        return {"status": "error", "detail": "No email address configured"}
+    if not SENDGRID_API_KEY or not EMAIL_FROM:
+        return {"status": "error", "detail": "SendGrid credentials not set in .env (SENDGRID_API_KEY, EMAIL_FROM)"}
+    try:
+        _send(
+            to_email,
+            subject="[ChainAgent] Test notification",
+            body="ChainAgent: Test notification — your email alerts are working correctly.",
+        )
+        return {"status": "sent"}
+    except urllib.error.HTTPError as e:
+        body = e.read().decode(errors="replace")
+        try:
+            detail = json.loads(body).get("errors", [{}])[0].get("message", body)
+        except Exception:
+            detail = body
+        return {"status": "error", "detail": f"SendGrid {e.code}: {detail}"}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
 
