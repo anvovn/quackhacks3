@@ -1,5 +1,6 @@
 "use client"
 import { useState, useEffect, useRef, useCallback } from "react"
+import { signOut, useSession } from "next-auth/react"
 import { useAgentStream } from "./hooks/useAgentStream"
 import type { TraceLine } from "./hooks/useAgentStream"
 
@@ -553,10 +554,21 @@ function NotificationsSection() {
 }
 
 function SettingsSection() {
+  const { data: session } = useSession()
   const [settings,setSettings] = useState({autoApprove:false,voice:true,snowflake:true,schedule:true})
   return (
     <>
       <SectionHeader eyebrow="// settings" title="Settings"/>
+      <Panel>
+        <PanelHeader title="◎ Account"/>
+        <div style={{padding:16,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+          <div>
+            <div style={{fontSize:13,color:"var(--text)"}}>{session?.user?.name ?? "Signed in"}</div>
+            <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginTop:4}}>{session?.user?.email ?? "—"}</div>
+          </div>
+          <Btn variant="ghost" onClick={() => signOut({ callbackUrl: "/login" })}>Sign out</Btn>
+        </div>
+      </Panel>
       <Panel>
         <PanelHeader title="◎ Agent Configuration"/>
         <div style={{padding:16,display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>

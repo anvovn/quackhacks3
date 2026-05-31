@@ -1,22 +1,23 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { signIn } from 'next-auth/react';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [googleDone, setGoogleDone] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
-  function handleGoogleLogin() {
+  async function handleGoogleLogin() {
+    setError('');
     setGoogleLoading(true);
-    setTimeout(() => {
-      setGoogleDone(true);
-      setTimeout(() => router.push('/dashboard'), 600);
-    }, 1400);
+    try {
+      await signIn('google', { callbackUrl: '/dashboard' });
+    } catch {
+      setError('Sign-in failed. Check AUTH_GOOGLE_ID and AUTH_GOOGLE_SECRET in .env.local.');
+      setGoogleLoading(false);
+    }
   }
 
   function handleEmailLogin() {
@@ -24,8 +25,7 @@ export default function LoginPage() {
       setError('Please enter your email and password');
       return;
     }
-    setError('');
-    router.push('/dashboard');
+    setError('Email sign-in is not configured. Use Continue with Google.');
   }
 
   return (
@@ -297,7 +297,7 @@ export default function LoginPage() {
             {/* Google button */}
             <button
               id="googleBtn"
-              className={`google-btn${googleDone ? ' done' : ''}`}
+              className="google-btn"
               onClick={handleGoogleLogin}
               disabled={googleLoading}
             >
@@ -308,7 +308,7 @@ export default function LoginPage() {
                 <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
               </svg>
               <span id="googleBtnText">
-                {googleDone ? 'Authenticated ✓' : googleLoading ? 'Signing in...' : 'Continue with Google'}
+                {googleLoading ? 'Signing in...' : 'Continue with Google'}
               </span>
             </button>
 
