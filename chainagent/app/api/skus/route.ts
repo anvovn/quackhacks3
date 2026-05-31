@@ -89,15 +89,17 @@ export async function GET() {
   const cfg = shopifyConfig();
 
   if (cfg) {
+    // Shopify is configured — never fall back to local fake data
     try {
       const skus = await fetchShopifySkus(cfg.store, cfg.token);
       return NextResponse.json(skus);
     } catch (err) {
-      console.error('Shopify fetch failed, falling back to local data:', err);
+      console.error('Shopify fetch failed:', err);
+      return NextResponse.json({ error: 'shopify_unreachable' }, { status: 503 });
     }
   }
 
-  // Fallback to local JSON
+  // Shopify not configured — serve local JSON
   try {
     return NextResponse.json(localSkus());
   } catch (err) {

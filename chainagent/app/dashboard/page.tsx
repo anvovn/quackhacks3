@@ -902,13 +902,12 @@ function AgentSection({brand,agentRunning,trace,showEmail,emailResult,showReply,
 // ── MAIN COMPONENT ──
 export default function Dashboard() {
   const [section, setSection]     = useState("overview")
-  const [brandId, setBrandId]     = useState("portland")
   const [syncSecs, setSyncSecs]   = useState(0)
   const [syncPhase, setSyncPhase] = useState<"idle"|"syncing"|"done">("idle")
   const [scheduleSecs, setScheduleSecs] = useState(7200)
   const [scheduleOn, setScheduleOn]     = useState(true)
   const [cdSecs, setCdSecs]       = useState(7200)
-  const [liveSkus, setLiveSkus]   = useState<RawSKU[] | null>(null)
+  const [liveSkus, setLiveSkus]   = useState<RawSKU[] | "error" | null>(null)
   const [auditRows, setAuditRows] = useState<AuditRow[]>([
     {time:"Today 09:14",  action:"Reorder drafted · Portland Aviator Pro · 800 units · $10,000", sku:"DHOD5-EC999009", label:"Pending"},
     {time:"Today 08:30",  action:"Agent cycle completed · 3 SKUs evaluated",                     sku:"all",           label:"Created"},
@@ -930,12 +929,12 @@ export default function Dashboard() {
   const stream = useAgentStream()
   const { agentRunning, showEmail, emailResult, showReply, backendOnline } = stream
 
-  // ── load real SKU data ──
+  // ── load real SKU data from Shopify ──
   useEffect(()=>{
     fetch("/api/skus")
-      .then(r=>r.json())
-      .then((data: RawSKU[])=>setLiveSkus(data))
-      .catch(()=>{}) // fall back to hardcoded BRANDS
+      .then(r=>{ if(!r.ok) throw new Error("api"); return r.json() })
+      .then((data: RawSKU[] | {error:string})=>{ setLiveSkus(Array.isArray(data) ? data : "error") })
+      .catch(()=>setLiveSkus("error"))
   },[])
 
   // ── load suppliers / invoices / deliveries ──
@@ -945,42 +944,39 @@ export default function Dashboard() {
     fetch("/api/deliveries").then(r=>r.json()).then((d:DeliveryCountry[])=>setDeliveries(d)).catch(()=>{})
   },[])
 
-  // Build the active brand: prefer live SKU data when loaded
-  const brand: Brand = (() => {
-    if (liveSkus) {
-      // Map raw SKUs into the dashboard SKU format
-      const mappedSkus: SKU[] = liveSkus.map((s, i) => {
-        const days = s.stock / s.velocity_per_day
-        const risk = days < s.lead_time_days ? "Critical" : days < s.lead_time_days * 2 ? "Watch" : "Healthy"
-        const pct  = Math.min(100, Math.round((days / (s.lead_time_days * 3)) * 100))
-        return {
-          name: s.name,
-          id: `SKU-${String(i+1).padStart(3,"0")}`,
-          stock: s.stock.toLocaleString(),
-          inc: "—",
-          vel: `${s.velocity_per_day}/day`,
-          days: days.toFixed(1),
-          pct,
-          risk,
-          rc: risk==="Critical"?"risk-critical":risk==="Watch"?"risk-watch":"risk-ok",
-        }
-      })
-      const critSku = mappedSkus.reduce((a,b)=>parseFloat(a.days)<parseFloat(b.days)?a:b)
-      const totalStock = liveSkus.reduce((a,s)=>a+s.stock,0)
+  // Build brand from live Shopify data only — no hardcoded fallback
+  const brand: Brand | null = (() => {
+    if (!Array.isArray(liveSkus) || liveSkus.length === 0) return null
+    const mappedSkus: SKU[] = liveSkus.map((s: RawSKU, i: number) => {
+      const days = s.stock / s.velocity_per_day
+      const risk = days < s.lead_time_days ? "Critical" : days < s.lead_time_days * 2 ? "Watch" : "Healthy"
+      const pct  = Math.min(100, Math.round((days / (s.lead_time_days * 3)) * 100))
       return {
-        name: "Live Inventory",
-        label: "brand: Live Data",
-        days: critSku.days,
-        stock: totalStock.toLocaleString(),
-        incoming: "—",
-        crit: critSku.name.toUpperCase(),
-        agentTitle: `chainagent-runtime · ${mappedSkus.length} SKUs monitored`,
-        supplier: liveSkus[0]?.supplier_name ?? "—",
-        email: "supplier@example.com",
-        skus: mappedSkus,
+        name: s.name,
+        id: s.id || `SKU-${String(i+1).padStart(3,"0")}`,
+        stock: s.stock.toLocaleString(),
+        inc: "—",
+        vel: `${s.velocity_per_day}/day`,
+        days: days.toFixed(1),
+        pct,
+        risk,
+        rc: risk==="Critical"?"risk-critical":risk==="Watch"?"risk-watch":"risk-ok",
       }
+    })
+    const critSku = mappedSkus.reduce((a: SKU, b: SKU) => parseFloat(a.days) < parseFloat(b.days) ? a : b)
+    const totalStock = liveSkus.reduce((a: number, s: RawSKU) => a + s.stock, 0)
+    return {
+      name: "Portland Optics",
+      label: "brand: Portland Optics",
+      days: critSku.days,
+      stock: totalStock.toLocaleString(),
+      incoming: "—",
+      crit: critSku.name.toUpperCase(),
+      agentTitle: `chainagent-runtime · ${mappedSkus.length} SKUs monitored`,
+      supplier: liveSkus[0]?.supplier_name ?? "—",
+      email: "wei@guangzhou-optics.cn",
+      skus: mappedSkus,
     }
-    return BRANDS[brandId]
   })()
 
   // Sync timer
@@ -1025,15 +1021,15 @@ export default function Dashboard() {
     if(cdInt.current)clearInterval(cdInt.current)
     stream.approve()
     const now=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})
-    setAuditRows(prev=>[{time:`Today ${now}`,action:"Reorder approved & sent · via ChainAgent",sku:brand.skus[0]?.id||"",label:"Sent"},...prev])
-  },[stream, brand.skus])
+    setAuditRows(prev=>[{time:`Today ${now}`,action:"Reorder approved & sent · via ChainAgent",sku:brand?.skus[0]?.id||"",label:"Sent"},...prev])
+  },[stream, brand])
 
   const handleCancel = useCallback(()=>{
     if(cdInt.current)clearInterval(cdInt.current)
     stream.cancel()
     const now=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})
-    setAuditRows(prev=>[{time:`Today ${now}`,action:"Reorder cancelled by founder",sku:brand.skus[0]?.id||"",label:"Cancelled"},...prev])
-  },[stream, brand.skus])
+    setAuditRows(prev=>[{time:`Today ${now}`,action:"Reorder cancelled by founder",sku:brand?.skus[0]?.id||"",label:"Cancelled"},...prev])
+  },[stream, brand])
 
   const handleReset = useCallback(()=>{
     stream.reset()
@@ -1045,7 +1041,10 @@ export default function Dashboard() {
     if (syncPhase !== "idle") return
     setSyncPhase("syncing")
     setSyncSecs(0)
-    fetch("/api/skus").then(r=>r.json()).then((data: RawSKU[])=>setLiveSkus(data)).catch(()=>{})
+    fetch("/api/skus")
+      .then(r=>{ if(!r.ok) throw new Error("api"); return r.json() })
+      .then((data: RawSKU[] | {error:string})=>setLiveSkus(Array.isArray(data) ? data : "error"))
+      .catch(()=>setLiveSkus("error"))
     setTimeout(()=>{
       setSyncPhase("done")
       setTimeout(()=>setSyncPhase("idle"), 1200)
@@ -1120,7 +1119,7 @@ export default function Dashboard() {
             </button>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8,background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:8,padding:"6px 12px",...S.mono,fontSize:11,color:"var(--text)"}}>
-            🏷 {brand.label}
+            🏷 {brand?.label ?? "portland-optics-65ovalib"}
           </div>
           <div style={{...S.mono,fontSize:10,color:"var(--muted)",background:"var(--surface2)",padding:"4px 10px",borderRadius:100,border:"1px solid var(--border)",cursor:"pointer"}} onClick={()=>setSection("settings")}>
             Next run: {fmt(scheduleSecs)}
@@ -1166,7 +1165,7 @@ export default function Dashboard() {
           </div>
           <div style={{marginTop:"auto",padding:12}}>
             <div style={{background:"var(--red-dim)",border:"1px solid rgba(239,68,68,0.2)",borderRadius:10,padding:10,marginBottom:7}}>
-              <div style={{...S.display,fontSize:20,fontWeight:800,color:"var(--red)",letterSpacing:"-0.02em"}}>{brand.days}</div>
+              <div style={{...S.display,fontSize:20,fontWeight:800,color:"var(--red)",letterSpacing:"-0.02em"}}>{brand?.days ?? "—"}</div>
               <div style={{...S.mono,fontSize:9,color:"var(--muted)",letterSpacing:"0.06em",marginTop:2}}>DAYS TO STOCKOUT</div>
             </div>
             <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:10,padding:10}}>
@@ -1178,11 +1177,35 @@ export default function Dashboard() {
 
         {/* MAIN */}
         <main style={{padding:"22px 26px",display:"flex",flexDirection:"column",gap:16,overflow:"hidden"}}>
-          {section==="overview"    &&<OverviewSection brand={brand} onRunAgent={()=>{setSection("agent");setTimeout(handleRunAgent,200)}} onViewAllReorders={()=>setSection("logs")}/>}
-          {section==="agent"       &&<AgentSection brand={brand} agentRunning={agentRunning} trace={stream.trace} showEmail={showEmail} emailResult={emailResult} showReply={showReply} cdVal={fmt(cdSecs)} onRun={handleRunAgent} onReset={handleReset} onApprove={handleApprove} onCancel={handleCancel} emailContent={stream.emailContent}/>}
-          {section==="inventory"   &&<InventorySection brand={brand}/>}
-          {section==="inbounds"    &&<InboundsSection brand={brand}/>}
-          {section==="orders"      &&<OrdersSection brand={brand}/>}
+          {["overview","agent","inventory","inbounds","orders"].includes(section) && (
+            liveSkus === null ? (
+              <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:320,gap:12}}>
+                <span style={{display:"inline-block",animation:"spin 1s linear infinite",fontSize:22,color:"var(--accent)"}}>↻</span>
+                <div style={{...S.mono,fontSize:12,color:"var(--muted)"}}>Loading inventory from Shopify…</div>
+              </div>
+            ) : liveSkus === "error" ? (
+              <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:320,gap:10}}>
+                <div style={{fontSize:28}}>⚠</div>
+                <div style={{...S.display,fontSize:16,fontWeight:700,color:"var(--red)"}}>Shopify unreachable</div>
+                <div style={{...S.mono,fontSize:11,color:"var(--muted)",textAlign:"center" as const,maxWidth:340}}>Could not load inventory. Check Shopify credentials in Settings or retry.</div>
+                <Btn onClick={handleResync} style={{marginTop:8}}>↻ Retry</Btn>
+              </div>
+            ) : brand === null ? (
+              <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:320,gap:10}}>
+                <div style={{fontSize:28}}>📦</div>
+                <div style={{...S.display,fontSize:16,fontWeight:700}}>No products found</div>
+                <div style={{...S.mono,fontSize:11,color:"var(--muted)"}}>Add products to your Shopify store and resync.</div>
+              </div>
+            ) : (
+              <>
+                {section==="overview"  &&<OverviewSection brand={brand} onRunAgent={()=>{setSection("agent");setTimeout(handleRunAgent,200)}} onViewAllReorders={()=>setSection("logs")}/>}
+                {section==="agent"     &&<AgentSection brand={brand} agentRunning={agentRunning} trace={stream.trace} showEmail={showEmail} emailResult={emailResult} showReply={showReply} cdVal={fmt(cdSecs)} onRun={handleRunAgent} onReset={handleReset} onApprove={handleApprove} onCancel={handleCancel} emailContent={stream.emailContent}/>}
+                {section==="inventory" &&<InventorySection brand={brand}/>}
+                {section==="inbounds"  &&<InboundsSection brand={brand}/>}
+                {section==="orders"    &&<OrdersSection brand={brand}/>}
+              </>
+            )
+          )}
           {section==="suppliers"   &&<SuppliersSection suppliers={suppliers} onGoToInbounds={()=>setSection("inbounds")}/>}
           {section==="invoices"    &&<InvoicesSection invoices={invoices}/>}
           {section==="delivery"    &&<DeliverySection countries={deliveries}/>}
