@@ -4,12 +4,12 @@ import os
 import threading
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Body
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-from agent.chain_agent import run_agent
+from agent.chain_agent import run_agent, adjust_shopify_inventory, load_skus
 
 _allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 
@@ -52,7 +52,6 @@ cancel_event  = threading.Event()
 
 
 def emit(tag: str, msg: str) -> None:
-    """Append a tagged SSE event to the trace queue."""
     trace_queue.append({"tag": tag, "msg": msg})
 
 
@@ -60,11 +59,10 @@ def is_running() -> bool:
     return agent_thread is not None and agent_thread.is_alive()
 
 
-def _agent_target() -> None:
-    """Thread target: runs the real agent and wraps it with lifecycle events."""
+def _agent_target(supplier_name: str = "", supplier_email: str = "") -> None:
     emit("STATUS", "Agent starting...")
     try:
-        run_agent(emit)
+        run_agent(emit, supplier_name=supplier_name, supplier_email=supplier_email)
     except Exception as exc:
         emit("ERROR", str(exc))
     finally:
@@ -76,38 +74,37 @@ def _agent_target() -> None:
 # ---------------------------------------------------------------------------
 
 @app.post("/run-agent")
-async def start_agent():
-    """Start the agent. Rejects if one is already running."""
+async def start_agent(body: dict = Body(default={})):
     global agent_thread
     if is_running():
         return {"status": "already_running"}
 
-    # Reset all state for a fresh run
     trace_queue.clear()
     approve_event.clear()
     cancel_event.clear()
 
-    agent_thread = threading.Thread(target=_agent_target, daemon=True)
+    supplier = body.get("supplier", {})
+    agent_thread = threading.Thread(
+        target=_agent_target,
+        args=(supplier.get("name", ""), supplier.get("email", "")),
+        daemon=True,
+    )
     agent_thread.start()
     return {"status": "started"}
 
 
 @app.post("/approve")
 async def approve_action():
-    """Signal the agent to proceed past a human-approval checkpoint."""
     if not is_running():
         return {"status": "no_agent_running"}
-
     approve_event.set()
     return {"status": "approved"}
 
 
 @app.post("/cancel")
 async def cancel_agent():
-    """Signal the agent to stop at the next safe checkpoint."""
     if not is_running():
         return {"status": "no_agent_running"}
-
     cancel_event.set()
     emit("STATUS", "Cancellation requested")
     return {"status": "cancelling"}
@@ -115,7 +112,6 @@ async def cancel_agent():
 
 @app.get("/status")
 async def get_status():
-    """Return agent liveness, queue depth, and pending-approval state."""
     return {
         "status": "online",
         "agent_running": is_running(),
@@ -126,7 +122,6 @@ async def get_status():
 
 @app.get("/stream")
 async def stream():
-    """SSE stream — proxied by Next.js app/api/stream/route.ts."""
     async def generator():
         seen = 0
         while True:
@@ -138,6 +133,25 @@ async def stream():
                 await asyncio.sleep(0.1)
 
     return StreamingResponse(generator(), media_type="text/event-stream")
+
+
+class ReceiveBody(BaseModel):
+    variant_id: int
+    qty: int
+
+
+@app.post("/reorder/receive")
+def receive_reorder(body: ReceiveBody):
+    try:
+        result = adjust_shopify_inventory(body.variant_id, body.qty)
+        return {"status": "received", "inventory_level": result}
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
+
+
+@app.get("/skus")
+async def get_skus():
+    return load_skus()
 
 
 class EmailConfigBody(BaseModel):
@@ -175,12 +189,11 @@ def send_test_email():
         )
         return {"status": "sent"}
     except urllib.error.HTTPError as e:
-        body = e.read().decode(errors="replace")
+        err_body = e.read().decode(errors="replace")
         try:
-            detail = json.loads(body).get("errors", [{}])[0].get("message", body)
+            detail = json.loads(err_body).get("errors", [{}])[0].get("message", err_body)
         except Exception:
-            detail = body
+            detail = err_body
         return {"status": "error", "detail": f"SendGrid {e.code}: {detail}"}
     except Exception as e:
         return {"status": "error", "detail": str(e)}
-

@@ -6,3 +6,4 @@ elevenlabs
 snowflake-connector-python
 python-dotenv
 pyaudio
+twilio

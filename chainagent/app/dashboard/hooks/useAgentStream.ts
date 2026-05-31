@@ -6,6 +6,15 @@ export interface TraceLine {
   time: string
 }
 
+export interface PendingReorder {
+  id: string
+  variant_id: number
+  name: string
+  qty: number
+  supplier: string
+  created_at: number
+}
+
 export interface AgentStatus {
   online: boolean
   agentRunning: boolean
@@ -16,15 +25,18 @@ export interface UseAgentStreamResult {
   trace: TraceLine[]
   agentRunning: boolean
   awaitingApproval: boolean
-  backendOnline: boolean | null   // null = still checking
+  backendOnline: boolean | null
   emailContent: string
   showEmail: boolean
   emailResult: string
   showReply: boolean
-  runAgent: () => Promise<void>
+  pendingReorders: PendingReorder[]
+  stagedReorder: Omit<PendingReorder,"created_at"> | null
+  runAgent: (supplier?: { name: string; email: string }) => Promise<void>
   approve: () => Promise<void>
   cancel: () => Promise<void>
   reset: () => void
+  removeReorder: (id: string) => void
 }
 
 export function useAgentStream(): UseAgentStreamResult {
@@ -36,10 +48,14 @@ export function useAgentStream(): UseAgentStreamResult {
   const [showEmail, setShowEmail]       = useState(false)
   const [emailResult, setEmailResult]   = useState("")
   const [showReply, setShowReply]       = useState(false)
+  const [pendingReorders, setPendingReorders] = useState<PendingReorder[]>([])
+  const [stagedReorder, setStagedReorder] = useState<Omit<PendingReorder,"created_at"> | null>(null)
 
   const esRef        = useRef<EventSource | null>(null)
   const statusTimer  = useRef<ReturnType<typeof setInterval> | null>(null)
   const replyTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const stagedReorderRef = useRef<Omit<PendingReorder,"created_at"> | null>(null)
+  const approvedRef  = useRef(false)
 
   // ── status polling ──────────────────────────────────────────────────────
   const pollStatus = useCallback(async () => {
@@ -91,6 +107,20 @@ export function useAgentStream(): UseAgentStreamResult {
           setShowEmail(true)
         }
 
+        if (data.tag === "REORDER") {
+          try {
+            const parsed = JSON.parse(data.msg)
+            console.log("[ChainAgent] REORDER received:", parsed)
+            stagedReorderRef.current = parsed
+            setStagedReorder(parsed)
+            // if user already approved before REORDER arrived, add immediately
+            if (approvedRef.current) {
+              setPendingReorders(prev => [...prev, { ...parsed, created_at: Date.now() }])
+              approvedRef.current = false
+            }
+          } catch {}
+        }
+
         if (data.tag === "STATUS" && data.msg === "Agent finished") {
           setAgentRunning(false)
         }
@@ -110,22 +140,28 @@ export function useAgentStream(): UseAgentStreamResult {
   }, [])
 
   // ── public actions ──────────────────────────────────────────────────────
-  const runAgent = useCallback(async () => {
+  const runAgent = useCallback(async (supplier?: { name: string; email: string }) => {
     if (agentRunning) return
 
-    // Reset UI state
     setTrace([])
     setShowEmail(false)
     setEmailContent("")
     setEmailResult("")
     setShowReply(false)
     setAgentRunning(true)
+    setPendingReorders([])
+    setStagedReorder(null)
+    stagedReorderRef.current = null
+    approvedRef.current = false
 
-    // Open the SSE stream first so we don't miss early events
     openStream()
 
     try {
-      const res = await fetch("/api/run-agent", { method: "POST" })
+      const res = await fetch("/api/run-agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ supplier: supplier ?? {} }),
+      })
       const data: { status: string } = await res.json()
       if (data.status === "already_running") {
         // stream is already open, that's fine
@@ -139,6 +175,13 @@ export function useAgentStream(): UseAgentStreamResult {
   const approve = useCallback(async () => {
     try {
       await fetch("/api/approve", { method: "POST" })
+      if (stagedReorderRef.current) {
+        setPendingReorders(prev => [...prev, { ...stagedReorderRef.current!, created_at: Date.now() }])
+        // keep stagedReorder in state so qty shows correctly in the reply message
+      } else {
+        // REORDER event hasn't arrived yet — flag so it gets added when it does
+        approvedRef.current = true
+      }
       setEmailResult("✓ Email sent to supplier · Logged to Snowflake · Inbound auto-created")
       setAwaitingApproval(false)
       const now = new Date().toLocaleTimeString("en-US", { hour12: false })
@@ -159,6 +202,10 @@ export function useAgentStream(): UseAgentStreamResult {
     }
   }, [])
 
+  const removeReorder = useCallback((id: string) => {
+    setPendingReorders(prev => prev.filter(r => r.id !== id))
+  }, [])
+
   const reset = useCallback(() => {
     closeStream()
     setAgentRunning(false)
@@ -168,6 +215,10 @@ export function useAgentStream(): UseAgentStreamResult {
     setEmailResult("")
     setShowReply(false)
     setAwaitingApproval(false)
+    setPendingReorders([])
+    stagedReorderRef.current = null
+    setStagedReorder(null)
+    approvedRef.current = false
     if (replyTimer.current) clearTimeout(replyTimer.current)
   }, [closeStream])
 
@@ -188,9 +239,12 @@ export function useAgentStream(): UseAgentStreamResult {
     showEmail,
     emailResult,
     showReply,
+    pendingReorders,
+    stagedReorder,
     runAgent,
     approve,
     cancel,
     reset,
+    removeReorder,
   }
 }

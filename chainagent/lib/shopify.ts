@@ -16,7 +16,7 @@ export function getShopifyConfig(): ShopifyConfig | null {
 export async function shopifyFetch<T>(cfg: ShopifyConfig, path: string): Promise<T> {
   const res = await fetch(`https://${cfg.store}/admin/api/2024-01/${path}`, {
     headers: { 'X-Shopify-Access-Token': cfg.token },
-    next: { revalidate: 60 },
+    cache: 'no-store',
   });
   if (!res.ok) throw new Error(`Shopify ${res.status}: ${path}`);
   return res.json() as Promise<T>;
