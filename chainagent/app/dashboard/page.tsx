@@ -38,6 +38,8 @@ interface PurchaseOrder {
 interface StockInbound {
   id: string; name: string; skuId: string; supplier: string
   qty: number; variantId?: number; approvedAt: string
+  status: "pending" | "in-transit" | "received"
+  poRef?: string
 }
 interface ShopifyOrder {
   id: string; customer: string; email: string; sku: string; skuCode: string
@@ -304,12 +306,17 @@ function InventorySection({brand, suppliers, skuSupplierMap, onAssign}:{
   )
 }
 
-function InboundsSection({inbounds, onReceive}: {inbounds: StockInbound[], onReceive: (id: string, variantId?: number, qty?: number) => void}) {
+function InboundsSection({inbounds, onSetInTransit, onReceive}: {
+  inbounds: StockInbound[]
+  onSetInTransit: (id: string) => void
+  onReceive: (id: string, poRef?: string) => void
+}) {
   const [receiving, setReceiving] = useState<string | null>(null)
 
   async function handleReceive(inbound: StockInbound) {
     setReceiving(inbound.id)
     try {
+      // Only call Shopify when actually receiving stock
       if(inbound.variantId && inbound.qty) {
         await fetch("/api/reorder/receive", {
           method: "POST",
@@ -319,7 +326,7 @@ function InboundsSection({inbounds, onReceive}: {inbounds: StockInbound[], onRec
       }
     } finally {
       setReceiving(null)
-      onReceive(inbound.id, inbound.variantId, inbound.qty)
+      onReceive(inbound.id, inbound.poRef)
     }
   }
 
@@ -341,8 +348,14 @@ function InboundsSection({inbounds, onReceive}: {inbounds: StockInbound[], onRec
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
           {inbounds.map(inbound => {
             const isReceiving = receiving === inbound.id
+            const inTransit = inbound.status === "in-transit"
+            const borderColor = inTransit ? "var(--blue)" : "var(--amber)"
+            const badgeBg = inTransit ? "rgba(59,130,246,0.12)" : "rgba(251,191,36,0.12)"
+            const badgeColor = inTransit ? "var(--blue)" : "var(--amber)"
+            const badgeBorder = inTransit ? "1px solid rgba(59,130,246,0.25)" : "1px solid rgba(251,191,36,0.25)"
+            const badgeLabel = inTransit ? "IN TRANSIT" : "AWAITING SHIPMENT"
             return (
-              <div key={inbound.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderLeft:"4px solid var(--amber)",borderRadius:12,overflow:"hidden"}}>
+              <div key={inbound.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderLeft:`4px solid ${borderColor}`,borderRadius:12,overflow:"hidden"}}>
                 <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:14}}>
                   {/* Header */}
                   <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between"}}>
@@ -352,7 +365,7 @@ function InboundsSection({inbounds, onReceive}: {inbounds: StockInbound[], onRec
                         {inbound.skuId} · Approved {inbound.approvedAt}
                       </div>
                     </div>
-                    <span style={{...S.mono,fontSize:9,padding:"3px 8px",borderRadius:100,background:"rgba(251,191,36,0.12)",color:"var(--amber)",border:"1px solid rgba(251,191,36,0.25)",flexShrink:0}}>AWAITING RECEIPT</span>
+                    <span style={{...S.mono,fontSize:9,padding:"3px 8px",borderRadius:100,background:badgeBg,color:badgeColor,border:badgeBorder,flexShrink:0}}>{badgeLabel}</span>
                   </div>
 
                   {/* Details row */}
@@ -367,17 +380,25 @@ function InboundsSection({inbounds, onReceive}: {inbounds: StockInbound[], onRec
                     </div>
                   </div>
 
-                  {/* Action */}
-                  <div style={{borderTop:"1px solid var(--border)",paddingTop:12,display:"flex",alignItems:"center",gap:12}}>
+                  {/* Actions */}
+                  <div style={{borderTop:"1px solid var(--border)",paddingTop:12,display:"flex",alignItems:"center",gap:10}}>
+                    {!inTransit && (
+                      <button
+                        onClick={()=>onSetInTransit(inbound.id)}
+                        style={{...S.mono,fontSize:11,fontWeight:600,padding:"9px 18px",borderRadius:8,border:"1px solid var(--border2)",cursor:"pointer",background:"var(--surface2)",color:"var(--text)",flexShrink:0}}
+                      >
+                        🚚 Mark In Transit
+                      </button>
+                    )}
                     <button
                       onClick={()=>handleReceive(inbound)}
                       disabled={isReceiving}
-                      style={{...S.mono,fontSize:11,fontWeight:600,padding:"9px 20px",borderRadius:8,border:"none",cursor:isReceiving?"not-allowed":"pointer",background:isReceiving?"var(--surface3)":"var(--amber)",color:isReceiving?"var(--muted)":"#000",transition:"background 0.2s",flexShrink:0}}
+                      style={{...S.mono,fontSize:11,fontWeight:600,padding:"9px 20px",borderRadius:8,border:"none",cursor:isReceiving?"not-allowed":"pointer",background:isReceiving?"var(--surface3)":"var(--accent)",color:isReceiving?"var(--muted)":"#000",transition:"background 0.2s",flexShrink:0}}
                     >
                       {isReceiving ? "Confirming…" : "✓ Confirm Stock Received"}
                     </button>
                     <div style={{...S.mono,fontSize:10,color:"var(--muted)",lineHeight:1.5}}>
-                      Adds {(inbound.qty??0).toLocaleString()} units to Shopify inventory and removes this entry.
+                      {inTransit ? `Receiving ${(inbound.qty??0).toLocaleString()} units into Shopify.` : "Mark shipment received to update inventory."}
                     </div>
                   </div>
                 </div>
@@ -1276,7 +1297,7 @@ export default function Dashboard() {
     if(critSku){
       const ref=`PO-${now.getFullYear()}-${String(Date.now()).slice(-4)}`
       setOrders(prev=>[{ref,sku:critSku.name,skuId:critSku.id,supplier,supplierEmail:agentSupplierEmail,qty,orderDate:dateStr,eta:dateStr,status:"sent" as const},...prev])
-      setInbounds(prev=>[{id:`INB-${Date.now()}`,name:critSku.name,skuId:critSku.id,supplier,qty,approvedAt:dateStr},...prev])
+      setInbounds(prev=>[{id:`INB-${Date.now()}`,name:critSku.name,skuId:critSku.id,supplier,qty,approvedAt:dateStr,status:"pending" as const,poRef:ref},...prev])
     }
   },[stream, brand, agentReorderQty, agentSupplierEmail, agentSupplierName, setInbounds])
 
@@ -1475,7 +1496,15 @@ export default function Dashboard() {
                   ):<AgentSection brand={brand} supplierEmail={agentSupplierEmail} supplierName={agentSupplierName} reorderQty={agentReorderQty} agentRunning={agentRunning} trace={stream.trace} showEmail={showEmail} emailResult={emailResult} showReply={showReply} cdVal={fmt(cdSecs)} onRun={handleRunAgent} onReset={handleReset} onApprove={handleApprove} onCancel={handleCancel} emailContent={stream.emailContent}/>
                 )}
                 {section==="inventory" &&<InventorySection brand={brand} suppliers={suppliers} skuSupplierMap={skuSupplierMap} onAssign={(id,suppId)=>setSkuSupplierMap(m=>({...m,[id]:suppId}))}/>}
-                {section==="inbounds"  &&<InboundsSection inbounds={inbounds} onReceive={(id)=>{ setInbounds(prev=>prev.filter(i=>i.id!==id)); handleResync() }}/>}
+                {section==="inbounds"  &&<InboundsSection
+                    inbounds={inbounds}
+                    onSetInTransit={(id)=>setInbounds(prev=>prev.map(i=>i.id===id?{...i,status:"in-transit" as const}:i))}
+                    onReceive={(id,poRef)=>{
+                      setInbounds(prev=>prev.filter(i=>i.id!==id))
+                      if(poRef) setOrders(prev=>prev.map(p=>p.ref===poRef?{...p,status:"received" as const}:p))
+                      handleResync()
+                    }}
+                  />}
                 {section==="orders"    &&<OrdersSection orders={shopifyOrders}/>}
               </>
             )
