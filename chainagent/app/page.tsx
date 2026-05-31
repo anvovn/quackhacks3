@@ -22,7 +22,7 @@ const LINES: TerminalLine[] = [
   { delay: 3300, type: 'line', time: '09:14:05', tag: 'THINK', tagClass: 'tag-think', msg: '<span class="dim">›</span> reorder qty calc: 48/day × 30 day buffer + 21 day lead = <span class="hi">800 units</span>' },
   { delay: 3700, type: 'line', time: '09:14:06', tag: 'THINK', tagClass: 'tag-think', msg: '<span class="dim">›</span> COGS: $12.50 · total order value: <span class="warn">$10,000</span> · recommendation: reorder now' },
   { delay: 4200, type: 'divider' },
-  { delay: 4500, type: 'line', time: '09:14:07', tag: 'ACT',   tagClass: 'tag-act',   msg: 'Drafting supplier email · supplier: Guangzhou Optics Co.' },
+  { delay: 4500, type: 'line', time: '09:14:07', tag: 'ACT',   tagClass: 'tag-act',   msg: 'Drafting supplier email · supplier: Milano Lens Works' },
   { delay: 5000, type: 'email' },
   { delay: 5500, type: 'line', time: '09:14:09', tag: 'ALERT', tagClass: 'tag-alert', msg: 'ElevenLabs · playing voice alert to founder...' },
   { delay: 5900, type: 'line', time: '09:14:09', tag: 'ACT',   tagClass: 'tag-act',   msg: 'Action queued · auto-sends in <span class="warn">01:59:51</span> unless cancelled' },
@@ -71,10 +71,10 @@ function Terminal() {
           if (item.type === 'divider') return <div key={i} className="t-divider visible" />;
           if (item.type === 'email') return (
             <div key={i} className="t-email-box visible">
-              <div className="email-to">To: <span>guangzhou@supplier.cn</span></div>
+              <div className="email-to">To: <span>orders@milanolensworks.it</span></div>
               <div className="email-to">Subject: <span>Urgent Reorder — Portland Aviator Pro · 800 units</span></div>
               <div className="email-body">
-                Hi Wei,<br /><br />
+                Hi Marco,<br /><br />
                 We need to place an urgent reorder for <span className="em">800 units</span> of Portland Aviator Pro (SKU: DHOD5-EC999009).<br />
                 Current stock covers <span className="em">~9 days</span>. Please confirm availability and earliest ship date.<br /><br />
                 <span className="dim">— Sent by ChainAgent on behalf of Portland Optics</span>
@@ -285,14 +285,14 @@ export default function Home() {
 
       {/* HERO */}
       <section className="hero">
-        <p className="hero-eyebrow">Autonomous supply chain · DTC brands · China fulfillment</p>
+        <p className="hero-eyebrow">Autonomous supply chain · DTC brands · Global fulfillment</p>
         <h1 className="hero-title">
           Your agent<br />
           <span className="line2">doesn&apos;t <span className="accent-word">wait.</span></span>
         </h1>
         <p className="hero-desc">
           ChainAgent monitors every SKU, reasons about stockout risk,
-          drafts the reorder to your China supplier, and waits for your approval.
+          drafts the reorder to your supplier, and waits for your approval.
           You stay in control. It does the work.
         </p>
         <div className="hero-actions">
@@ -325,7 +325,7 @@ export default function Home() {
           {[
             { num: '01', icon: '👁', iconClass: 'icon-watch', title: 'Watch', desc: 'Polls your inventory data continuously. Calculates real-time sales velocity per SKU against supplier lead times.' },
             { num: '02', icon: '🧠', iconClass: 'icon-think', title: 'Think', desc: 'Gemini reasons through the risk — stock level, velocity trend, lead time, upcoming promotions, reorder quantity.' },
-            { num: '03', icon: '⚡', iconClass: 'icon-act',   title: 'Act',   desc: 'Drafts a reorder email to your China supplier with exact quantity, spec, and urgency. Queues it for approval.' },
+            { num: '03', icon: '⚡', iconClass: 'icon-act',   title: 'Act',   desc: 'Drafts a reorder email to your supplier with exact quantity, spec, and urgency. Queues it for approval.' },
             { num: '04', icon: '✓', iconClass: 'icon-confirm', title: 'Confirm', desc: 'You approve, edit, or cancel in one click. If you don\'t respond in 2 hours, it sends automatically. You set the rules.' },
           ].map((s) => (
             <div className="step-card" key={s.num}>
@@ -406,7 +406,6 @@ export default function Home() {
 
       <footer>
         <div className="footer-logo">ChainAgent</div>
-        <div className="footer-note">Built at QuackHacks 3.0 · University of Oregon</div>
       </footer>
     </>
   );

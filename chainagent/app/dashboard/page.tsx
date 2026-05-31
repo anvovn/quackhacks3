@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { signOut, useSession } from "next-auth/react"
 import { useAgentStream } from "./hooks/useAgentStream"
-import type { TraceLine, PendingReorder } from "./hooks/useAgentStream"
+import type { TraceLine } from "./hooks/useAgentStream"
 
 // ── TYPES ──
 interface SKU {
@@ -34,6 +34,12 @@ interface PurchaseOrder {
   ref: string; sku: string; skuId: string; supplier: string; supplierEmail: string
   qty: number; orderDate: string; eta: string
   status: "sent" | "confirmed" | "in-transit" | "received"
+}
+interface StockInbound {
+  id: string; name: string; skuId: string; supplier: string
+  qty: number; variantId?: number; approvedAt: string
+  status: "pending" | "in-transit" | "received"
+  poRef?: string
 }
 interface ShopifyOrder {
   id: string; customer: string; email: string; sku: string; skuCode: string
@@ -300,69 +306,103 @@ function InventorySection({brand, suppliers, skuSupplierMap, onAssign}:{
   )
 }
 
-function InboundsSection({reorders, onReceive}: {reorders: PendingReorder[], onReceive: (r: PendingReorder) => void}) {
+function InboundsSection({inbounds, onSetInTransit, onReceive}: {
+  inbounds: StockInbound[]
+  onSetInTransit: (id: string) => void
+  onReceive: (id: string, poRef?: string) => void
+}) {
   const [receiving, setReceiving] = useState<string | null>(null)
 
-  async function handleReceive(r: PendingReorder) {
-    setReceiving(r.id)
+  async function handleReceive(inbound: StockInbound) {
+    setReceiving(inbound.id)
     try {
-      await fetch("/api/reorder/receive", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ variant_id: r.variant_id, qty: r.qty }),
-      })
+      // Only call Shopify when actually receiving stock
+      if(inbound.variantId && inbound.qty) {
+        await fetch("/api/reorder/receive", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ variant_id: inbound.variantId, qty: inbound.qty }),
+        })
+      }
     } finally {
       setReceiving(null)
-      onReceive(r)
+      onReceive(inbound.id, inbound.poRef)
     }
   }
 
   return (
     <>
       <SectionHeader eyebrow="// stock inbounds" title="Stock Inbounds"/>
-      {reorders.length === 0 ? (
+      {inbounds.length === 0 ? (
         <Panel>
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"48px 0",gap:10}}>
-            <div style={{fontSize:28}}>📥</div>
-            <div style={{...S.display,fontSize:15,fontWeight:700}}>No inbounds yet</div>
+            <div style={{fontSize:28}}>📦</div>
+            <div style={{...S.display,fontSize:15,fontWeight:700}}>No pending inbounds</div>
             <div style={{...S.mono,fontSize:11,color:"var(--muted)",textAlign:"center" as const,maxWidth:320,lineHeight:1.7}}>
-              Inbound shipments will appear here when ChainAgent creates a reorder.<br/>
-              Approve a reorder in the Agent section to generate one.
+              When you approve an agent reorder, the shipment will appear here.<br/>
+              Confirm receipt once the stock arrives at your warehouse.
             </div>
           </div>
         </Panel>
       ) : (
-        <div style={{display:"flex",flexDirection:"column",gap:10}}>
-          {reorders.map(r => {
-            const daysElapsed = Math.floor((Date.now() - r.created_at) / (24 * 60 * 60 * 1000))
-            const isReceiving = receiving === r.id
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          {inbounds.map(inbound => {
+            const isReceiving = receiving === inbound.id
+            const inTransit = inbound.status === "in-transit"
+            const borderColor = inTransit ? "var(--blue)" : "var(--amber)"
+            const badgeBg = inTransit ? "rgba(59,130,246,0.12)" : "rgba(251,191,36,0.12)"
+            const badgeColor = inTransit ? "var(--blue)" : "var(--amber)"
+            const badgeBorder = inTransit ? "1px solid rgba(59,130,246,0.25)" : "1px solid rgba(251,191,36,0.25)"
+            const badgeLabel = inTransit ? "IN TRANSIT" : "AWAITING SHIPMENT"
             return (
-              <Panel key={r.id}>
-                <div style={{padding:"16px 18px",display:"flex",flexDirection:"column",gap:12}}>
+              <div key={inbound.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderLeft:`4px solid ${borderColor}`,borderRadius:12,overflow:"hidden"}}>
+                <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:14}}>
+                  {/* Header */}
                   <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between"}}>
                     <div>
-                      <div style={{fontSize:14,fontWeight:600,color:"var(--text)"}}>{r.name}</div>
-                      <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginTop:2}}>{r.supplier||"—"} · {(r.qty??0).toLocaleString()} units ordered</div>
+                      <div style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>{inbound.name}</div>
+                      <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginTop:3}}>
+                        {inbound.skuId} · Approved {inbound.approvedAt}
+                      </div>
                     </div>
-                    <StatusPill label="In Transit" type="transit"/>
+                    <span style={{...S.mono,fontSize:9,padding:"3px 8px",borderRadius:100,background:badgeBg,color:badgeColor,border:badgeBorder,flexShrink:0}}>{badgeLabel}</span>
                   </div>
-                  <div>
-                    <div style={{display:"flex",justifyContent:"space-between",...S.mono,fontSize:10,color:"var(--muted2)",marginBottom:5}}>
-                      <span>Ordered today</span>
-                      <span style={{color:"var(--blue)"}}>{daysElapsed === 0 ? "Awaiting shipment" : `${daysElapsed} day${daysElapsed !== 1 ? "s" : ""} in transit`}</span>
+
+                  {/* Details row */}
+                  <div style={{display:"flex",gap:24}}>
+                    <div>
+                      <div style={{...S.mono,fontSize:9,color:"var(--muted)",marginBottom:2}}>SUPPLIER</div>
+                      <div style={{fontSize:12,color:"var(--text)"}}>{inbound.supplier}</div>
                     </div>
-                    <div style={{height:4,background:"var(--surface3)",borderRadius:2}}>
-                      <div style={{height:"100%",width:`${Math.min(100, daysElapsed * 5)}%`,background:"var(--blue)",borderRadius:2,transition:"width 1s"}}/>
+                    <div>
+                      <div style={{...S.mono,fontSize:9,color:"var(--muted)",marginBottom:2}}>UNITS ORDERED</div>
+                      <div style={{...S.mono,fontSize:14,fontWeight:700,color:"var(--text)"}}>{(inbound.qty??0).toLocaleString()}</div>
                     </div>
                   </div>
-                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                    <Btn variant="primary" style={{fontSize:11,padding:"7px 16px"}} onClick={() => handleReceive(r)}>
-                      {isReceiving ? "Receiving…" : "✓ Mark as Received"}
-                    </Btn>
-                    <div style={{...S.mono,fontSize:10,color:"var(--muted)"}}>Clicking will add {(r.qty??0).toLocaleString()} units to Shopify inventory</div>
+
+                  {/* Actions */}
+                  <div style={{borderTop:"1px solid var(--border)",paddingTop:12,display:"flex",alignItems:"center",gap:10}}>
+                    {!inTransit && (
+                      <button
+                        onClick={()=>onSetInTransit(inbound.id)}
+                        style={{...S.mono,fontSize:11,fontWeight:600,padding:"9px 18px",borderRadius:8,border:"1px solid var(--border2)",cursor:"pointer",background:"var(--surface2)",color:"var(--text)",flexShrink:0}}
+                      >
+                        🚚 Mark In Transit
+                      </button>
+                    )}
+                    <button
+                      onClick={()=>handleReceive(inbound)}
+                      disabled={isReceiving}
+                      style={{...S.mono,fontSize:11,fontWeight:600,padding:"9px 20px",borderRadius:8,border:"none",cursor:isReceiving?"not-allowed":"pointer",background:isReceiving?"var(--surface3)":"var(--accent)",color:isReceiving?"var(--muted)":"#000",transition:"background 0.2s",flexShrink:0}}
+                    >
+                      {isReceiving ? "Confirming…" : "✓ Confirm Stock Received"}
+                    </button>
+                    <div style={{...S.mono,fontSize:10,color:"var(--muted)",lineHeight:1.5}}>
+                      {inTransit ? `Receiving ${(inbound.qty??0).toLocaleString()} units into Shopify.` : "Mark shipment received to update inventory."}
+                    </div>
                   </div>
                 </div>
-              </Panel>
+              </div>
             )
           })}
         </div>
@@ -557,6 +597,11 @@ function SuppliersSection({suppliers, onAdd, onUpdate}:{suppliers:Supplier[], on
   )
 }
 
+const PO_STATUSES: PurchaseOrder["status"][] = ["sent","confirmed","in-transit","received"]
+const PO_STATUS_LABEL: Record<PurchaseOrder["status"],string> = {
+  "sent":"Sent","confirmed":"Confirmed","in-transit":"In Transit","received":"Received"
+}
+
 interface SnowflakeRow { timestamp: string; sku_id: string; sku_name: string; days_left: number; reasoning: string; email_draft: string; status: string }
 
 function AgentInquiriesPanel() {
@@ -568,15 +613,12 @@ function AgentInquiriesPanel() {
   useEffect(()=>{
     fetch("/api/snowflake-logs")
       .then(r=>r.json())
-      .then(d=>{
-        if(d.error) setError(d.error)
-        setRows(d.rows ?? [])
-      })
+      .then(d=>{ if(d.error) setError(d.error); setRows(d.rows ?? []) })
       .catch(()=>setError("Failed to reach backend"))
       .finally(()=>setLoading(false))
   },[])
 
-  function fmt(ts: string) {
+  function fmtTs(ts: string) {
     try { return new Date(ts).toLocaleString("en-US",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}) }
     catch { return ts }
   }
@@ -590,28 +632,16 @@ function AgentInquiriesPanel() {
       <RowHead cols="130px 1fr 70px 40px"><Th>Time</Th><Th>SKU</Th><Th>Days Left</Th><Th/></RowHead>
       {rows.map((r,i)=>(
         <div key={i}>
-          <div
-            onClick={()=>setExpanded(expanded===i?null:i)}
-            style={{display:"grid",gridTemplateColumns:"130px 1fr 70px 40px",gap:10,padding:"11px 18px",borderBottom:"1px solid var(--border)",alignItems:"center",cursor:"pointer",background:expanded===i?"var(--surface2)":"transparent"}}
-          >
-            <div style={{...S.mono,fontSize:10,color:"var(--muted)"}}>{fmt(r.timestamp)}</div>
-            <div>
-              <div style={{fontSize:12,color:"var(--text)"}}>{r.sku_name}</div>
-              <div style={{...S.mono,fontSize:9,color:"var(--muted)"}}>{r.sku_id}</div>
-            </div>
+          <div onClick={()=>setExpanded(expanded===i?null:i)} style={{display:"grid",gridTemplateColumns:"130px 1fr 70px 40px",gap:10,padding:"11px 18px",borderBottom:"1px solid var(--border)",alignItems:"center",cursor:"pointer",background:expanded===i?"var(--surface2)":"transparent"}}>
+            <div style={{...S.mono,fontSize:10,color:"var(--muted)"}}>{fmtTs(r.timestamp)}</div>
+            <div><div style={{fontSize:12,color:"var(--text)"}}>{r.sku_name}</div><div style={{...S.mono,fontSize:9,color:"var(--muted)"}}>{r.sku_id}</div></div>
             <div style={{...S.mono,fontSize:12,color:r.days_left<7?"var(--red)":r.days_left<14?"#f59e0b":"var(--accent)"}}>{r.days_left?.toFixed(1)}d</div>
             <div style={{...S.mono,fontSize:11,color:"var(--muted)",textAlign:"center" as const}}>{expanded===i?"▲":"▼"}</div>
           </div>
           {expanded===i&&(
             <div style={{background:"var(--surface2)",borderBottom:"1px solid var(--border)",padding:"14px 18px",display:"flex",flexDirection:"column",gap:12}}>
-              <div>
-                <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginBottom:4}}>GEMINI REASONING</div>
-                <div style={{fontSize:12,color:"var(--text)",lineHeight:1.7,whiteSpace:"pre-wrap"}}>{r.reasoning||"—"}</div>
-              </div>
-              <div>
-                <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginBottom:4}}>EMAIL DRAFT</div>
-                <div style={{fontSize:12,color:"var(--text)",lineHeight:1.7,whiteSpace:"pre-wrap",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:8,padding:"10px 12px"}}>{r.email_draft||"—"}</div>
-              </div>
+              <div><div style={{...S.mono,fontSize:10,color:"var(--muted)",marginBottom:4}}>GEMINI REASONING</div><div style={{fontSize:12,color:"var(--text)",lineHeight:1.7,whiteSpace:"pre-wrap"}}>{r.reasoning||"—"}</div></div>
+              <div><div style={{...S.mono,fontSize:10,color:"var(--muted)",marginBottom:4}}>EMAIL DRAFT</div><div style={{fontSize:12,color:"var(--text)",lineHeight:1.7,whiteSpace:"pre-wrap",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:8,padding:"10px 12px"}}>{r.email_draft||"—"}</div></div>
             </div>
           )}
         </div>
@@ -620,20 +650,11 @@ function AgentInquiriesPanel() {
   )
 }
 
-function OrderHistorySection({orders: initOrders, auditRows, pendingReorders, onClear, onUpdateOrder}:{orders:PurchaseOrder[], auditRows:AuditRow[], pendingReorders:PendingReorder[], onClear:()=>void, onUpdateOrder:(ref:string, status:PurchaseOrder["status"])=>void}) {
-  const [orders, setOrders] = useState(initOrders)
+function OrderHistorySection({orders, auditRows, inbounds, onUpdateOrder}:{orders:PurchaseOrder[], auditRows:AuditRow[], inbounds:StockInbound[], onUpdateOrder:(ref:string, status:PurchaseOrder["status"])=>void}) {
   const [activeTab, setActiveTab] = useState<"orders"|"inquiries">("orders")
-  useEffect(()=>setOrders(initOrders),[initOrders])
 
-  const nextStatus:{[k in PurchaseOrder["status"]]:PurchaseOrder["status"]} = {
-    "sent":"confirmed","confirmed":"in-transit","in-transit":"received","received":"received"
-  }
-  const nextLabel = (s:PurchaseOrder["status"]) =>
-    s==="sent"?"Mark Confirmed":s==="confirmed"?"Mark In Transit":s==="in-transit"?"Mark Received":""
   const pillType = (s:PurchaseOrder["status"]):React.ComponentProps<typeof StatusPill>["type"] =>
     s==="received"?"live":s==="in-transit"?"transit":s==="confirmed"?"pending":"draft"
-  const pillLabel = (s:PurchaseOrder["status"]) =>
-    s==="received"?"Received":s==="in-transit"?"In Transit":s==="confirmed"?"Confirmed":"Sent"
 
   function exportCSV() {
     const header = "Time,Event,SKU,Detail,Status\n"
@@ -644,7 +665,7 @@ function OrderHistorySection({orders: initOrders, auditRows, pendingReorders, on
     URL.revokeObjectURL(url)
   }
 
-  const isEmpty = orders.length===0 && auditRows.length===0 && pendingReorders.length===0
+  const isEmpty = orders.length===0 && auditRows.length===0 && inbounds.length===0
 
   const tabBtnStyle = (active: boolean) => ({
     ...S.mono, fontSize:11, padding:"5px 14px", borderRadius:6, border:"1px solid var(--border)",
@@ -661,7 +682,6 @@ function OrderHistorySection({orders: initOrders, auditRows, pendingReorders, on
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
             {activeTab==="orders" && <>
               <Btn onClick={exportCSV}>↓ Export CSV</Btn>
-              <Btn onClick={onClear} style={{color:"var(--muted)"}}>✕ Clear History</Btn>
             </>}
             <div style={{display:"flex",gap:4}}>
               <button style={tabBtnStyle(activeTab==="orders")}    onClick={()=>setActiveTab("orders")}>Orders</button>
@@ -684,7 +704,7 @@ function OrderHistorySection({orders: initOrders, auditRows, pendingReorders, on
           </div>
         ):<>
           <RowHead cols="110px 1fr 1fr 60px 110px 110px 120px">
-            <Th>PO Ref</Th><Th>SKU</Th><Th>Supplier</Th><Th>Qty</Th><Th>Date</Th><Th>Status</Th><Th>Action</Th>
+            <Th>PO Ref</Th><Th>SKU</Th><Th>Supplier</Th><Th>Qty</Th><Th>Date</Th><Th>Status</Th><Th>Update</Th>
           </RowHead>
           {orders.map((po,i)=>(
             <div key={po.ref} style={{display:"grid",gridTemplateColumns:"110px 1fr 1fr 60px 110px 110px 120px",gap:10,padding:"12px 18px",borderBottom:i<orders.length-1?"1px solid var(--border)":"none",alignItems:"center",background:po.status==="received"?"rgba(0,229,160,0.02)":"transparent"}}>
@@ -693,25 +713,30 @@ function OrderHistorySection({orders: initOrders, auditRows, pendingReorders, on
               <div><div style={{fontSize:12,color:"var(--text)"}}>{po.supplier}</div>{po.supplierEmail&&<div style={{...S.mono,fontSize:9,color:"var(--muted)"}}>{po.supplierEmail}</div>}</div>
               <div style={{...S.mono,fontSize:12}}>{(po.qty??0).toLocaleString()}</div>
               <div style={{...S.mono,fontSize:11,color:"var(--muted)"}}>{po.orderDate}</div>
-              <StatusPill label={pillLabel(po.status)} type={pillType(po.status)}/>
-              {po.status!=="received"
-                ?<Btn style={{fontSize:10,padding:"4px 10px"}} onClick={()=>{const s=nextStatus[po.status];setOrders(prev=>prev.map(p=>p.ref===po.ref?{...p,status:s}:p));onUpdateOrder(po.ref,s)}}>{nextLabel(po.status)}</Btn>
-                :<div style={{...S.mono,fontSize:10,color:"var(--accent)"}}>✓ Complete</div>}
+              <StatusPill label={PO_STATUS_LABEL[po.status]} type={pillType(po.status)}/>
+              <select
+                value={po.status}
+                onChange={e=>onUpdateOrder(po.ref, e.target.value as PurchaseOrder["status"])}
+                style={{...S.mono,fontSize:10,background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:6,padding:"4px 8px",color:"var(--text)",outline:"none",cursor:"pointer",width:"100%"}}
+              >
+                {PO_STATUSES.map(s=><option key={s} value={s}>{PO_STATUS_LABEL[s]}</option>)}
+              </select>
             </div>
           ))}
         </>}
       </Panel>
 
-      {/* Stock Inbounds (in transit) */}
-      {pendingReorders.length>0&&(
+      {/* Stock Inbounds awaiting receipt */}
+      {inbounds.length>0&&(
         <Panel>
-          <PanelHeader title="📥 Stock Inbounds (In Transit)"/>
-          <RowHead cols="1fr 1fr 80px"><Th>SKU</Th><Th>Supplier</Th><Th>Qty</Th></RowHead>
-          {pendingReorders.map((r,i)=>(
-            <div key={r.id} style={{display:"grid",gridTemplateColumns:"1fr 1fr 80px",gap:10,padding:"12px 18px",borderBottom:i<pendingReorders.length-1?"1px solid var(--border)":"none",alignItems:"center"}}>
+          <PanelHeader title="📦 Awaiting Receipt"/>
+          <RowHead cols="1fr 1fr 80px 80px"><Th>SKU</Th><Th>Supplier</Th><Th>Qty</Th><Th>Approved</Th></RowHead>
+          {inbounds.map((r,i)=>(
+            <div key={r.id} style={{display:"grid",gridTemplateColumns:"1fr 1fr 80px 80px",gap:10,padding:"12px 18px",borderBottom:i<inbounds.length-1?"1px solid var(--border)":"none",alignItems:"center",borderLeft:"3px solid var(--amber)"}}>
               <div style={{fontSize:12,color:"var(--text)"}}>{r.name}</div>
               <div style={{...S.mono,fontSize:11,color:"var(--muted)"}}>{r.supplier}</div>
               <div style={{...S.mono,fontSize:12}}>{(r.qty??0).toLocaleString()}</div>
+              <div style={{...S.mono,fontSize:10,color:"var(--muted)"}}>{r.approvedAt}</div>
             </div>
           ))}
         </Panel>
@@ -1027,8 +1052,15 @@ function SettingsSection({agentSettings, onSaveSettings}:{agentSettings:AgentSet
           ] as {key:keyof AgentSettings, label:string, sub:string}[]).map(({key,label,sub})=>(
             <div key={key} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 13px",background:"var(--surface2)",borderRadius:10,border:"1px solid var(--border)"}}>
               <div><div style={{fontSize:13,color:"var(--text)"}}>{label}</div><div style={{...S.mono,fontSize:10,color:"var(--muted)",marginTop:1}}>{sub}</div></div>
-              <input value={draft[key] as number} type="number" min={0.1} step={0.1}
-                onChange={e=>setDraft(d=>({...d,[key]:Math.max(0.1,parseFloat(e.target.value)||0.1)}))}
+              <input
+                key={key}
+                defaultValue={draft[key] as number}
+                type="number" min={1}
+                onBlur={e=>{
+                  const v = Math.max(1, parseInt(e.target.value) || 1)
+                  e.target.value = String(v)
+                  setDraft(d=>({...d,[key]:v}))
+                }}
                 style={{...S.mono,background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:6,padding:"5px 9px",color:"var(--text)",fontSize:11,outline:"none",width:70}}/>
             </div>
           ))}
@@ -1231,6 +1263,7 @@ export default function Dashboard() {
   const [suppliers,        setSuppliers]        = useState<Supplier[]>([])
   const [skuSupplierMap,   setSkuSupplierMap]   = useState<Record<string,string>>({})
   const [orders,           setOrders]           = useState<PurchaseOrder[]>([])
+  const [inbounds,         setInbounds]         = useState<StockInbound[]>([])
 
   const [shopifyOrders,    setShopifyOrders]    = useState<ShopifyOrder[]>([])
   const [shopifyConnected, setShopifyConnected] = useState<boolean|null>(null)
@@ -1271,6 +1304,8 @@ export default function Dashboard() {
       if(rawOrders) setOrders(JSON.parse(rawOrders))
       const rawAudit = localStorage.getItem(`chainagent:${userKey}:auditRows`)
       if(rawAudit) setAuditRows(JSON.parse(rawAudit))
+      const rawInbounds = localStorage.getItem(`chainagent:${userKey}:inbounds`)
+      if(rawInbounds) setInbounds(JSON.parse(rawInbounds))
       const rawSched = localStorage.getItem(`chainagent:${userKey}:scheduleTarget`)
       if(rawSched){
         const target = parseInt(rawSched)
@@ -1285,12 +1320,13 @@ export default function Dashboard() {
   useEffect(()=>{ try { localStorage.setItem(`chainagent:${userKey}:agentSettings`, JSON.stringify(agentSettings)) } catch {} },[userKey, agentSettings])
   useEffect(()=>{ try { localStorage.setItem(`chainagent:${userKey}:orders`, JSON.stringify(orders)) } catch {} },[userKey, orders])
   useEffect(()=>{ try { localStorage.setItem(`chainagent:${userKey}:auditRows`, JSON.stringify(auditRows)) } catch {} },[userKey, auditRows])
+  useEffect(()=>{ try { localStorage.setItem(`chainagent:${userKey}:inbounds`, JSON.stringify(inbounds)) } catch {} },[userKey, inbounds])
 
   const cdInt = useRef<ReturnType<typeof setInterval>|null>(null)
 
   // ── real backend hook ──
   const stream = useAgentStream()
-  const { agentRunning, showEmail, emailResult, showReply, backendOnline, pendingReorders, stagedReorder, removeReorder } = stream
+  const { agentRunning, showEmail, emailResult, showReply, backendOnline, stagedReorder } = stream
 
   // ── check Shopify connection status ──
   useEffect(()=>{
@@ -1350,7 +1386,7 @@ export default function Dashboard() {
       label: "brand: Portland Optics",
       days: critSku.days,
       stock: totalStock.toLocaleString(),
-      incoming: pendingReorders.length > 0 ? pendingReorders.reduce((s, r) => s + r.qty, 0).toLocaleString() : "—",
+      incoming: inbounds.length > 0 ? inbounds.reduce((s, r) => s + (r.qty??0), 0).toLocaleString() : "—",
       crit: critSku.name.toUpperCase(),
       agentTitle: `chainagent-runtime · ${mappedSkus.length} SKUs monitored`,
       supplier: suppliers[0]?.name || "—",
@@ -1372,11 +1408,14 @@ export default function Dashboard() {
     return ()=>clearInterval(t)
   },[])
 
-  // Schedule countdown — auto-runs agent when interval expires
+  // Schedule countdown — resets immediately when interval or enabled changes
   useEffect(()=>{
-    if(!agentSettings.scheduleEnabled) return
+    if(!agentSettings.scheduleEnabled){
+      setScheduleSecs(agentSettings.scheduleIntervalMins * 60)
+      return
+    }
     const interval = agentSettings.scheduleIntervalMins * 60
-    // save target so it survives refresh
+    setScheduleSecs(interval)
     try { localStorage.setItem(`chainagent:${userKey}:scheduleTarget`, String(Date.now() + interval * 1000)) } catch {}
     const t = setInterval(()=>{
       setScheduleSecs(s=>{
@@ -1437,8 +1476,7 @@ export default function Dashboard() {
     if(cdInt.current)clearInterval(cdInt.current)
     stream.approve()
     const critSku  = brand?.skus.find(s=>s.risk==="Critical")||brand?.skus[0]
-    const reorder  = stream.pendingReorders[0]
-    const qty      = reorder?.qty ?? agentReorderQty
+    const qty      = agentReorderQty
     const supplier = agentSupplierName || brand?.supplier || "Supplier"
     const now      = new Date()
     const timeStr  = now.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})
@@ -1447,12 +1485,11 @@ export default function Dashboard() {
     setAuditRows(prev=>[{time:`Today ${timeStr}`,action:`Reorder approved · ${critSku?.name||""} · ${qty} units → ${supplier}`,sku:critSku?.id||"",label:"Sent"},...prev])
 
     if(critSku){
-      setOrders(prev=>{
-        const ref=`PO-${now.getFullYear()}-${String(prev.length+1).padStart(3,"0")}`
-        return [{ref,sku:critSku.name,skuId:critSku.id,supplier,supplierEmail:agentSupplierEmail,qty,orderDate:dateStr,eta:dateStr,status:"sent" as const},...prev]
-      })
+      const ref=`PO-${now.getFullYear()}-${String(Date.now()).slice(-4)}`
+      setOrders(prev=>[{ref,sku:critSku.name,skuId:critSku.id,supplier,supplierEmail:agentSupplierEmail,qty,orderDate:dateStr,eta:dateStr,status:"sent" as const},...prev])
+      setInbounds(prev=>[{id:`INB-${Date.now()}`,name:critSku.name,skuId:critSku.id,supplier,qty,approvedAt:dateStr,status:"pending" as const,poRef:ref},...prev])
     }
-  },[stream, brand, agentReorderQty, agentSupplierEmail, agentSupplierName])
+  },[stream, brand, agentReorderQty, agentSupplierEmail, agentSupplierName, setInbounds])
 
   const handleCancel = useCallback(()=>{
     if(cdInt.current)clearInterval(cdInt.current)
@@ -1518,7 +1555,7 @@ export default function Dashboard() {
     {id:"overview",    name:"Overview",       icon:"◈", label:"Monitor"},
     {id:"agent",       name:"Run Agent",      icon:"⚡", label:"Monitor"},
     {id:"inventory",   name:"Inventory",      icon:"◫", label:"Monitor"},
-    {id:"inbounds",    name:"Stock Inbounds", icon:"📥",label:"Monitor",badge:pendingReorders.length>0?String(pendingReorders.length):undefined,badgeColor:"amber"},
+    {id:"inbounds",    name:"Stock Inbounds", icon:"📥",label:"Monitor",badge:inbounds.length>0?String(inbounds.length):undefined,badgeColor:"amber"},
     {id:"orders",      name:"Orders",         icon:"📦",label:"Monitor"},
     {id:"suppliers",   name:"Suppliers",      icon:"◉", label:"Manage"},
     {id:"history",     name:"Agent Orders",icon:"≡",label:"Manage",badge:auditRows.length>0?String(auditRows.length):undefined,badgeColor:"green"},
@@ -1700,13 +1737,25 @@ export default function Dashboard() {
                   ):<AgentSection brand={brand} supplierEmail={agentSupplierEmail} supplierName={agentSupplierName} reorderQty={agentReorderQty} agentRunning={agentRunning} trace={stream.trace} showEmail={showEmail} emailResult={emailResult} showReply={showReply} cdVal={fmt(cdSecs)} onRun={handleRunAgent} onReset={handleReset} onApprove={handleApprove} onCancel={handleCancel} emailContent={stream.emailContent}/>
                 )}
                 {section==="inventory" &&<InventorySection brand={brand} suppliers={suppliers} skuSupplierMap={skuSupplierMap} onAssign={(id,suppId)=>setSkuSupplierMap(m=>({...m,[id]:suppId}))}/>}
-                {section==="inbounds"  &&<InboundsSection reorders={pendingReorders} onReceive={r=>{removeReorder(r.id);handleResync()}}/>}
+                {section==="inbounds"  &&<InboundsSection
+                    inbounds={inbounds}
+                    onSetInTransit={(id)=>{
+                      const inbound = inbounds.find(i=>i.id===id)
+                      setInbounds(prev=>prev.map(i=>i.id===id?{...i,status:"in-transit" as const}:i))
+                      if(inbound?.poRef) setOrders(prev=>prev.map(p=>p.ref===inbound.poRef?{...p,status:"in-transit" as const}:p))
+                    }}
+                    onReceive={(id,poRef)=>{
+                      setInbounds(prev=>prev.filter(i=>i.id!==id))
+                      if(poRef) setOrders(prev=>prev.map(p=>p.ref===poRef?{...p,status:"received" as const}:p))
+                      handleResync()
+                    }}
+                  />}
                 {section==="orders"    &&<OrdersSection orders={shopifyOrders}/>}
               </>
             )
           )}
           {section==="suppliers" && (shopifyConnected===null?null:shopifyConnected===false?<ShopifyGate onSettings={()=>setSection("settings")}/>:<SuppliersSection suppliers={suppliers} onAdd={s=>setSuppliers(prev=>[...prev,s])} onUpdate={s=>setSuppliers(prev=>prev.map(p=>p.id===s.id?s:p))}/>)}
-          {section==="history"   && <OrderHistorySection orders={orders} auditRows={auditRows} pendingReorders={pendingReorders} onClear={()=>{setOrders([]);setAuditRows([])}} onUpdateOrder={(ref,status)=>setOrders(prev=>prev.map(p=>p.ref===ref?{...p,status}:p))}/>}
+          {section==="history"   && <OrderHistorySection orders={orders} auditRows={auditRows} inbounds={inbounds} onUpdateOrder={(ref,status)=>setOrders(prev=>prev.map(p=>p.ref===ref?{...p,status}:p))}/>}
           {section==="notifications"&&<NotificationsSection/>}
           {section==="settings"    &&<SettingsSection agentSettings={agentSettings} onSaveSettings={setAgentSettings}/>}
         </main>
