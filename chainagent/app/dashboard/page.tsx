@@ -35,11 +35,6 @@ interface PurchaseOrder {
   qty: number; orderDate: string; eta: string
   status: "sent" | "confirmed" | "in-transit" | "received"
 }
-interface Inbound {
-  ref: string; poRef: string; sku: string; skuId: string; supplier: string
-  units: number; orderDate: string; eta: string; tracking: string
-  status: "awaiting-shipment" | "in-transit" | "delivered"
-}
 interface ShopifyOrder {
   id: string; customer: string; email: string; sku: string; skuCode: string
   qty: number; financialStatus: string; fulfillmentStatus: string | null
@@ -991,7 +986,7 @@ export default function Dashboard() {
   const [suppliers,        setSuppliers]        = useState<Supplier[]>([])
   const [skuSupplierMap,   setSkuSupplierMap]   = useState<Record<string,string>>({}) // skuId → supplierId
   const [orders,           setOrders]           = useState<PurchaseOrder[]>([])
-  const [inbounds,         setInbounds]         = useState<Inbound[]>([])
+
   const [shopifyOrders,    setShopifyOrders]    = useState<ShopifyOrder[]>([])
   const [shopifyConnected, setShopifyConnected] = useState<boolean|null>(null)
   const cdInt = useRef<ReturnType<typeof setInterval>|null>(null)
@@ -1141,10 +1136,6 @@ export default function Dashboard() {
     if(critSku){
       setOrders(prev=>{
         const ref=`PO-${now.getFullYear()}-${String(prev.length+1).padStart(3,"0")}`
-        setInbounds(ib=>{
-          const inbRef=`INB-${now.getFullYear()}-${String(ib.length+1).padStart(3,"0")}`
-          return [{ref:inbRef,poRef:ref,sku:critSku.name,skuId:critSku.id,supplier,units:qty,orderDate:dateStr,eta,tracking:"Pending",status:"awaiting-shipment" as const},...ib]
-        })
         return [{ref,sku:critSku.name,skuId:critSku.id,supplier,supplierEmail:agentSupplierEmail,qty,orderDate:dateStr,eta,status:"sent" as const},...prev]
       })
     }
@@ -1346,7 +1337,7 @@ export default function Dashboard() {
                   ):<AgentSection brand={brand} supplierEmail={agentSupplierEmail} supplierName={agentSupplierName} reorderQty={agentReorderQty} agentRunning={agentRunning} trace={stream.trace} showEmail={showEmail} emailResult={emailResult} showReply={showReply} cdVal={fmt(cdSecs)} onRun={handleRunAgent} onReset={handleReset} onApprove={handleApprove} onCancel={handleCancel} emailContent={stream.emailContent}/>
                 )}
                 {section==="inventory" &&<InventorySection brand={brand} suppliers={suppliers} skuSupplierMap={skuSupplierMap} onAssign={(id,suppId)=>setSkuSupplierMap(m=>({...m,[id]:suppId}))}/>}
-                {section==="inbounds"  &&<InboundsSection inbounds={inbounds}/>}
+                {section==="inbounds"  &&<InboundsSection reorders={pendingReorders} onReceive={r=>{removeReorder(r.id);handleResync()}}/>}
                 {section==="orders"    &&<OrdersSection orders={shopifyOrders}/>}
               </>
             )

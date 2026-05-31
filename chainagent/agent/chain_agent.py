@@ -58,6 +58,32 @@ def _shopify_config() -> dict | None:
     return None
 
 
+VELOCITY_DAYS = 30
+
+
+def _fetch_velocity(store: str, token: str) -> dict[str, float]:
+    since = (
+        __import__("datetime").datetime.utcnow()
+        - __import__("datetime").timedelta(days=VELOCITY_DAYS)
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    url = (
+        f"https://{store}/admin/api/2024-01/orders.json"
+        f"?status=any&created_at_min={since}&fields=line_items&limit=250"
+    )
+    req = urllib.request.Request(url, headers={"X-Shopify-Access-Token": token})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        orders = json.loads(resp.read())["orders"]
+
+    units: dict[str, int] = {}
+    for order in orders:
+        for item in order.get("line_items", []):
+            sku = item.get("sku")
+            if sku:
+                units[sku] = units.get(sku, 0) + item["quantity"]
+
+    return {sku: round(total / VELOCITY_DAYS, 1) for sku, total in units.items()}
+
+
 def _fetch_shopify_skus(store: str, token: str) -> list[dict]:
     url = f"https://{store}/admin/api/2024-01/products.json?fields=id,title,variants&limit=250"
     req = urllib.request.Request(url, headers={"X-Shopify-Access-Token": token})
@@ -65,6 +91,8 @@ def _fetch_shopify_skus(store: str, token: str) -> list[dict]:
         products = json.loads(resp.read())["products"]
 
     supplement = _load_supplement()
+    velocity = _fetch_velocity(store, token)
+
     skus = []
     for product in products:
         variants = product["variants"]
@@ -79,12 +107,17 @@ def _fetch_shopify_skus(store: str, token: str) -> list[dict]:
                 if len(variants) > 1 and variant["title"] != "Default Title"
                 else ""
             )
+            sku_id = variant["sku"] or f"shopify-{variant['id']}"
+            # Use real 30-day Shopify velocity; fall back to supplement only if no sales recorded
+            real_vel = velocity.get(variant["sku"]) if variant["sku"] else None
+            vel = real_vel if real_vel is not None and real_vel > 0 else supp["velocity_per_day"]
             skus.append({
-                "id": variant["sku"] or f"shopify-{variant['id']}",
+                "id": sku_id,
                 "variant_id": variant["id"],
                 "name": f"{product['title']}{label}",
                 "stock": variant["inventory_quantity"],
-                "velocity_per_day": supp["velocity_per_day"],
+                "velocity_per_day": vel,
+                "velocity_source": "shopify_orders" if real_vel else "supplement",
                 "lead_time_days": supp["lead_time_days"],
                 "reorder_qty": supp["reorder_qty"],
             })
@@ -166,7 +199,8 @@ def run_agent(emit, supplier_name: str = "", supplier_email: str = ""):
 
     for sku in skus:
         days = sku["stock"] / sku["velocity_per_day"]
-        emit("WATCH", f"{sku['name']} · days_left: {days:.1f}")
+        src = sku.get("velocity_source", "supplement")
+        emit("WATCH", f"{sku['name']} · {sku['velocity_per_day']}/day ({src}) · days_left: {days:.1f}")
 
         if days < sku["lead_time_days"]:
             emit("RISK", f"Threshold breach: {sku['name']}")
