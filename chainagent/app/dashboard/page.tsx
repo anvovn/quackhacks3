@@ -869,8 +869,15 @@ function SettingsSection({agentSettings, onSaveSettings}:{agentSettings:AgentSet
           ] as {key:keyof AgentSettings, label:string, sub:string}[]).map(({key,label,sub})=>(
             <div key={key} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 13px",background:"var(--surface2)",borderRadius:10,border:"1px solid var(--border)"}}>
               <div><div style={{fontSize:13,color:"var(--text)"}}>{label}</div><div style={{...S.mono,fontSize:10,color:"var(--muted)",marginTop:1}}>{sub}</div></div>
-              <input value={draft[key] as number} type="number" min={1}
-                onChange={e=>setDraft(d=>({...d,[key]:Math.max(1,parseInt(e.target.value)||1)}))}
+              <input
+                key={key}
+                defaultValue={draft[key] as number}
+                type="number" min={1}
+                onBlur={e=>{
+                  const v = Math.max(1, parseInt(e.target.value) || 1)
+                  e.target.value = String(v)
+                  setDraft(d=>({...d,[key]:v}))
+                }}
                 style={{...S.mono,background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:6,padding:"5px 9px",color:"var(--text)",fontSize:11,outline:"none",width:70}}/>
             </div>
           ))}
