@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 from agent.elevenlabs import trigger_voice
 from agent.snowflake_log import log_snowflake
+from agent.twilio_sms import trigger_sms
 
 load_dotenv()
 
@@ -199,4 +200,5 @@ def run_agent(emit):
                 "lead_time_days": sku["lead_time_days"],
             }))
             trigger_voice(sku, days)
+            trigger_sms(sku, days)
             log_snowflake(sku, reasoning, email, days)

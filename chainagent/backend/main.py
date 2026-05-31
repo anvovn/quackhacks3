@@ -1,6 +1,7 @@
 import asyncio
 import json
 import threading
+from pathlib import Path
 
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -8,6 +9,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from agent.chain_agent import run_agent, adjust_shopify_inventory, load_skus
+
+DATA_DIR   = Path(__file__).resolve().parents[1] / "data"
+SMS_CONFIG = DATA_DIR / "sms-config.json"
+
+
+def _read_sms_config() -> dict:
+    try:
+        return json.loads(SMS_CONFIG.read_text())
+    except Exception:
+        return {"enabled": False, "phone": ""}
+
+
+def _write_sms_config(cfg: dict) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    SMS_CONFIG.write_text(json.dumps(cfg, indent=2))
 
 # ---------------------------------------------------------------------------
 # App
@@ -139,3 +155,20 @@ def receive_reorder(body: ReceiveBody):
 async def get_skus():
     """Return the SKU list from Shopify."""
     return load_skus()
+
+
+class SmsConfigBody(BaseModel):
+    enabled: bool
+    phone: str
+
+
+@app.get("/sms-config")
+def get_sms_config():
+    return _read_sms_config()
+
+
+@app.post("/sms-config")
+def save_sms_config(body: SmsConfigBody):
+    cfg = {"enabled": body.enabled, "phone": body.phone.strip()}
+    _write_sms_config(cfg)
+    return {"status": "saved", **cfg}

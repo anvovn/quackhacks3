@@ -120,15 +120,15 @@ function StatusPill({label,type}:{label:string,type:"transit"|"live"|"pending"|"
   return <span style={{...S.mono,fontSize:10,fontWeight:500,padding:"3px 8px",borderRadius:4,...map[type]}}>{label}</span>
 }
 
-function Btn({children,onClick,variant="ghost",style={}}:{children:React.ReactNode,onClick?:()=>void,variant?:"primary"|"ghost"|"danger"|"amber",style?:React.CSSProperties}) {
-  const base:React.CSSProperties = {...S.mono,fontSize:11,fontWeight:500,letterSpacing:"0.04em",padding:"7px 13px",borderRadius:7,border:"none",cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,transition:"all 0.15s"}
+function Btn({children,onClick,variant="ghost",style={},disabled=false}:{children:React.ReactNode,onClick?:()=>void,variant?:"primary"|"ghost"|"danger"|"amber",style?:React.CSSProperties,disabled?:boolean}) {
+  const base:React.CSSProperties = {...S.mono,fontSize:11,fontWeight:500,letterSpacing:"0.04em",padding:"7px 13px",borderRadius:7,border:"none",cursor:disabled?"not-allowed":"pointer",display:"inline-flex",alignItems:"center",gap:5,transition:"all 0.15s"}
   const variants = {
     primary:{background:"var(--accent)",color:"#060809"},
     ghost:  {background:"var(--surface)",color:"var(--muted2)",border:"1px solid var(--border2)"},
     danger: {background:"var(--red-dim)",color:"var(--red)",border:"1px solid rgba(239,68,68,0.2)"},
     amber:  {background:"var(--amber-dim)",color:"var(--amber)",border:"1px solid rgba(245,158,11,0.2)"},
   }
-  return <button style={{...base,...variants[variant],...style}} onClick={onClick}>{children}</button>
+  return <button style={{...base,...variants[variant],...style}} onClick={onClick} disabled={disabled}>{children}</button>
 }
 
 function Toggle({on,onChange}:{on:boolean,onChange:(v:boolean)=>void}) {
@@ -666,20 +666,51 @@ function LogsSection({auditRows}:{auditRows:AuditRow[]}) {
 }
 
 function NotificationsSection() {
-  const channels = [
+  const staticChannels = [
     {icon:"💬",bg:"#4A154B",name:"Slack",sub:"Connected · #chainagent-alerts",on:true,preview:"🚨 ChainAgent: Portland Aviator Pro 8.9 days stock. Lead 21 days. Reorder drafted 800 units. Approve →"},
     {icon:"📧",bg:"#EA4335",name:"Email",sub:"founder@portlandoptics.com",on:true,preview:"[ChainAgent] Action Required — Portland Aviator Pro stockout in 8.9 days. Reorder awaiting approval."},
-    {icon:"📱",bg:"#25D366",name:"SMS / WhatsApp",sub:"via Twilio API",on:false,preview:"ChainAgent: ⚠ Portland Aviator Pro — 8.9 days left. Reorder drafted ($10k). Reply YES to approve."},
     {icon:"🔊",bg:"var(--accent-dim)",name:"Voice Alert",sub:"ElevenLabs · Rachel",on:true,preview:"\"Portland Aviator Pro has 8 days of stock. Lead time is 21 days. I've drafted a reorder for 800 units. Awaiting your approval.\""},
   ]
-  const [states, setStates] = useState(channels.map(c=>c.on))
+  const [states, setStates] = useState(staticChannels.map(c=>c.on))
+
+  // SMS state — persisted via backend
+  const [smsEnabled, setSmsEnabled] = useState(false)
+  const [smsPhone, setSmsPhone]     = useState("")
+  const [smsSaving, setSmsSaving]   = useState(false)
+  const [smsSaved,  setSmsSaved]    = useState(false)
+
+  useEffect(()=>{
+    fetch("/api/sms-config").then(r=>r.json()).then(d=>{
+      setSmsEnabled(d.enabled ?? false)
+      setSmsPhone(d.phone ?? "")
+    }).catch(()=>{})
+  },[])
+
+  async function saveSmsConfig(enabled: boolean, phone: string) {
+    setSmsSaving(true); setSmsSaved(false)
+    try {
+      await fetch("/api/sms-config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled,phone})})
+      setSmsSaved(true)
+      setTimeout(()=>setSmsSaved(false),2000)
+    } finally { setSmsSaving(false) }
+  }
+
+  function handleSmsToggle(v: boolean) {
+    setSmsEnabled(v)
+    saveSmsConfig(v, smsPhone)
+  }
+
+  function handlePhoneSave() {
+    saveSmsConfig(smsEnabled, smsPhone)
+  }
+
   return (
     <>
       <SectionHeader eyebrow="// notifications" title="Notifications"/>
       <Panel>
         <PanelHeader title="🔔 Notification Channels"/>
         <div style={{padding:16,display:"flex",flexDirection:"column",gap:10}}>
-          {channels.map((c,i)=>(
+          {staticChannels.map((c,i)=>(
             <div key={i} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:10,padding:"12px 14px"}}>
               <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:8}}>
                 <div style={{width:28,height:28,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,background:c.bg,flexShrink:0}}>{c.icon}</div>
@@ -689,6 +720,39 @@ function NotificationsSection() {
               <div style={{fontSize:11,color:"var(--muted2)",lineHeight:1.6,borderTop:"1px solid var(--border)",paddingTop:8}}><strong>Preview:</strong> {c.preview}</div>
             </div>
           ))}
+
+          {/* SMS — live Twilio integration */}
+          <div style={{background:"var(--surface2)",border:`1px solid ${smsEnabled?"rgba(37,211,102,0.25)":"var(--border)"}`,borderRadius:10,padding:"12px 14px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:8}}>
+              <div style={{width:28,height:28,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,background:"#25D366",flexShrink:0}}>📱</div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:12,fontWeight:500,color:"var(--text)"}}>SMS</div>
+                <div style={{...S.mono,fontSize:10,color:smsEnabled?"var(--accent)":"var(--muted)"}}>
+                  {smsEnabled ? (smsPhone ? `● ${smsPhone}` : "● Enabled · no phone set") : "◌ via Twilio API"}
+                </div>
+              </div>
+              <Toggle on={smsEnabled} onChange={handleSmsToggle}/>
+            </div>
+            <div style={{fontSize:11,color:"var(--muted2)",lineHeight:1.6,borderTop:"1px solid var(--border)",paddingTop:8}}>
+              <strong>Preview:</strong> ChainAgent: ⚠ Portland Aviator Pro — 8.9 days left. Reorder drafted. Log in to approve.
+            </div>
+            <div style={{marginTop:10,display:"flex",gap:7,alignItems:"center"}}>
+              <input
+                type="tel"
+                placeholder="+1 555 000 0000"
+                value={smsPhone}
+                onChange={e=>setSmsPhone(e.target.value)}
+                style={{...S.mono,flex:1,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:6,padding:"6px 10px",color:"var(--text)",fontSize:11,outline:"none"}}
+              />
+              <Btn onClick={handlePhoneSave} disabled={smsSaving} style={{fontSize:10,padding:"6px 12px",opacity:smsSaving?0.6:1}}>
+                {smsSaving?"Saving…":smsSaved?"Saved ✓":"Save"}
+              </Btn>
+            </div>
+            <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginTop:6}}>
+              Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM in .env
+            </div>
+          </div>
+
           <Btn style={{width:"100%",justifyContent:"center",padding:10}}>📤 Send test notification</Btn>
         </div>
       </Panel>
