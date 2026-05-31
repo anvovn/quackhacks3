@@ -12,7 +12,6 @@ export interface PendingReorder {
   name: string
   qty: number
   supplier: string
-  lead_time_days: number
   created_at: number
 }
 
@@ -32,7 +31,8 @@ export interface UseAgentStreamResult {
   emailResult: string
   showReply: boolean
   pendingReorders: PendingReorder[]
-  runAgent: () => Promise<void>
+  stagedReorder: Omit<PendingReorder,"created_at"> | null
+  runAgent: (supplier?: { name: string; email: string }) => Promise<void>
   approve: () => Promise<void>
   cancel: () => Promise<void>
   reset: () => void
@@ -49,10 +49,12 @@ export function useAgentStream(): UseAgentStreamResult {
   const [emailResult, setEmailResult]   = useState("")
   const [showReply, setShowReply]       = useState(false)
   const [pendingReorders, setPendingReorders] = useState<PendingReorder[]>([])
+  const [stagedReorder, setStagedReorder] = useState<Omit<PendingReorder,"created_at"> | null>(null)
 
   const esRef        = useRef<EventSource | null>(null)
   const statusTimer  = useRef<ReturnType<typeof setInterval> | null>(null)
   const replyTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const stagedReorderRef = useRef<Omit<PendingReorder,"created_at"> | null>(null)
 
   // ── status polling ──────────────────────────────────────────────────────
   const pollStatus = useCallback(async () => {
@@ -106,8 +108,10 @@ export function useAgentStream(): UseAgentStreamResult {
 
         if (data.tag === "REORDER") {
           try {
-            const reorder = JSON.parse(data.msg)
-            setPendingReorders(prev => [...prev, { ...reorder, created_at: Date.now() }])
+            const parsed = JSON.parse(data.msg)
+            console.log("[ChainAgent] REORDER staged:", parsed)
+            stagedReorderRef.current = parsed
+            setStagedReorder(parsed)
           } catch {}
         }
 
@@ -130,22 +134,27 @@ export function useAgentStream(): UseAgentStreamResult {
   }, [])
 
   // ── public actions ──────────────────────────────────────────────────────
-  const runAgent = useCallback(async () => {
+  const runAgent = useCallback(async (supplier?: { name: string; email: string }) => {
     if (agentRunning) return
 
-    // Reset UI state
     setTrace([])
     setShowEmail(false)
     setEmailContent("")
     setEmailResult("")
     setShowReply(false)
     setAgentRunning(true)
+    setPendingReorders([])
+    setStagedReorder(null)
+    stagedReorderRef.current = null
 
-    // Open the SSE stream first so we don't miss early events
     openStream()
 
     try {
-      const res = await fetch("/api/run-agent", { method: "POST" })
+      const res = await fetch("/api/run-agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ supplier: supplier ?? {} }),
+      })
       const data: { status: string } = await res.json()
       if (data.status === "already_running") {
         // stream is already open, that's fine
@@ -159,6 +168,11 @@ export function useAgentStream(): UseAgentStreamResult {
   const approve = useCallback(async () => {
     try {
       await fetch("/api/approve", { method: "POST" })
+      if (stagedReorderRef.current) {
+        setPendingReorders(prev => [...prev, { ...stagedReorderRef.current!, created_at: Date.now() }])
+        stagedReorderRef.current = null
+        setStagedReorder(null)
+      }
       setEmailResult("✓ Email sent to supplier · Logged to Snowflake · Inbound auto-created")
       setAwaitingApproval(false)
       const now = new Date().toLocaleTimeString("en-US", { hour12: false })
@@ -192,6 +206,9 @@ export function useAgentStream(): UseAgentStreamResult {
     setEmailResult("")
     setShowReply(false)
     setAwaitingApproval(false)
+    setPendingReorders([])
+    stagedReorderRef.current = null
+    setStagedReorder(null)
     if (replyTimer.current) clearTimeout(replyTimer.current)
   }, [closeStream])
 
@@ -213,6 +230,7 @@ export function useAgentStream(): UseAgentStreamResult {
     emailResult,
     showReply,
     pendingReorders,
+    stagedReorder,
     runAgent,
     approve,
     cancel,
