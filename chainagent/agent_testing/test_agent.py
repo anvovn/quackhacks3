@@ -33,13 +33,11 @@ def test_generate():
     assert isinstance(response, str) and len(response) > 0
     emit("GENERATE", f"Response: {response}")
 
-# ── 4. test: skus.json loads correctly ───────────────────────────────────────
+# ── 4. test: Shopify SKUs load via /api/skus ─────────────────────────────────
 def test_data():
-    from agent.chain_agent import DATA_PATH
-    import json
-    with DATA_PATH.open() as f:
-        skus = json.load(f)
-    assert len(skus) > 0, "skus.json is empty"
+    from agent.chain_agent import load_skus
+    skus = load_skus()
+    assert len(skus) > 0, "No SKUs returned from /api/skus"
     for sku in skus:
         assert "name" in sku
         assert "stock" in sku

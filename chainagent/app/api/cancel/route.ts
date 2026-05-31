@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 
+const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:8000';
+
 export async function POST() {
   try {
-    const response = await fetch("http://localhost:8000/cancel", {
+    const response = await fetch(`${BACKEND_URL}/cancel`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

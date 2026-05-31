@@ -1,7 +1,7 @@
 import asyncio
 import json
+import os
 import threading
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 
 from agent.chain_agent import run_agent
 
-DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "skus.json"
+_allowed_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
 
 # ---------------------------------------------------------------------------
 # App
@@ -19,7 +19,7 @@ app = FastAPI(title="ChainAgent API", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],   # Next.js dev server
+    allow_origins=[o.strip() for o in _allowed_origins if o.strip()],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -122,9 +122,3 @@ async def stream():
 
     return StreamingResponse(generator(), media_type="text/event-stream")
 
-
-@app.get("/skus")
-async def get_skus():
-    """Return the SKU list from data/skus.json."""
-    with DATA_PATH.open() as f:
-        return json.load(f)

@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 
+const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:8000';
+
 export async function GET() {
   try {
-    const response = await fetch("http://localhost:8000/status", {
+    const response = await fetch(`${BACKEND_URL}/status`, {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
       // Short timeout so we fail fast instead of hanging

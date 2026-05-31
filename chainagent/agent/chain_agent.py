@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -13,18 +14,7 @@ from agent.snowflake_log import log_snowflake
 load_dotenv()
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
-
-DATA_DIR = Path(__file__).resolve().parents[1] / "data"
-LOCAL_SKUS_PATH   = DATA_DIR / "skus.json"
-SUPPLEMENT_PATH   = DATA_DIR / "sku-supplement.json"
-SHOPIFY_CFG_PATH  = DATA_DIR / "shopify-config.json"
-
-DEFAULT_SUPPLEMENT = {
-    "velocity_per_day": 30,
-    "lead_time_days": 21,
-    "supplier_name": "Shopify Store",
-    "reorder_qty": 500,
-}
+WEBAPP_URL = os.getenv("AUTH_URL", "http://localhost:3000").rstrip("/")
 
 
 def strip_markdown(text):
@@ -39,72 +29,31 @@ def strip_markdown(text):
     return text.strip()
 
 
-def _load_supplement() -> dict:
-    try:
-        return json.loads(SUPPLEMENT_PATH.read_text())
-    except Exception:
-        return {}
-
-
-def _shopify_config() -> dict | None:
-    store = os.getenv("SHOPIFY_STORE")
-    token = os.getenv("SHOPIFY_TOKEN")
-    if store and token:
-        return {"store": store, "token": token}
-    try:
-        cfg = json.loads(SHOPIFY_CFG_PATH.read_text())
-        if cfg.get("store") and cfg.get("token"):
-            return cfg
-    except Exception:
-        pass
-    return None
-
-
-def _fetch_shopify_skus(store: str, token: str) -> list[dict]:
-    url = f"https://{store}/admin/api/2024-01/products.json?fields=id,title,variants&limit=250"
-    req = urllib.request.Request(url, headers={"X-Shopify-Access-Token": token})
-    with urllib.request.urlopen(req, timeout=10) as resp:
-        products = json.loads(resp.read())["products"]
-
-    supplement = _load_supplement()
-    skus = []
-    for product in products:
-        variants = product["variants"]
-        for variant in variants:
-            supp = (
-                supplement.get(variant["sku"])
-                or supplement.get(product["title"])
-                or DEFAULT_SUPPLEMENT
-            )
-            label = (
-                f" {variant['title']}"
-                if len(variants) > 1 and variant["title"] != "Default Title"
-                else ""
-            )
-            skus.append({
-                "id": variant["sku"] or f"shopify-{variant['id']}",
-                "name": f"{product['title']}{label}",
-                "stock": variant["inventory_quantity"],
-                "velocity_per_day": supp["velocity_per_day"],
-                "lead_time_days": supp["lead_time_days"],
-                "supplier_name": supp["supplier_name"],
-                "reorder_qty": supp["reorder_qty"],
-            })
-    return skus
-
-
 def load_skus(emit=None) -> list[dict]:
-    cfg = _shopify_config()
-    if cfg:
-        try:
-            skus = _fetch_shopify_skus(cfg["store"], cfg["token"])
-            if emit:
-                emit("STATUS", f"Loaded {len(skus)} SKUs from Shopify")
-            return skus
-        except Exception as exc:
-            if emit:
-                emit("STATUS", f"Shopify fetch failed ({exc}), falling back to local data")
-    return json.loads(LOCAL_SKUS_PATH.read_text())
+    """Load SKUs via the Next.js /api/skus route (same path as the dashboard)."""
+    url = f"{WEBAPP_URL}/api/skus"
+    try:
+        with urllib.request.urlopen(url, timeout=15) as resp:
+            body = json.loads(resp.read())
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"SKU API returned {exc.code}: {detail}") from exc
+    except Exception as exc:
+        raise RuntimeError(f"Could not load SKUs from {url}: {exc}") from exc
+
+    if isinstance(body, dict):
+        if body.get("configured") is False:
+            raise RuntimeError("Shopify is not configured — connect your store in Settings")
+        if body.get("error") == "shopify_unreachable":
+            raise RuntimeError("Shopify unreachable — check credentials in Settings")
+        raise RuntimeError(f"Unexpected response from /api/skus: {body}")
+
+    if not body:
+        raise RuntimeError("No SKUs returned — add products to your Shopify store")
+
+    if emit:
+        emit("STATUS", f"Loaded {len(body)} SKUs from Shopify")
+    return body
 
 
 def get_gemini_client():
