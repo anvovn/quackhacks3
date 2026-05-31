@@ -83,6 +83,7 @@ async def start_agent(body: dict = Body(default={})):
     cancel_event.clear()
 
     supplier = body.get("supplier", {})
+
     agent_thread = threading.Thread(
         target=_agent_target,
         args=(supplier.get("name", ""), supplier.get("email", "")),
@@ -203,3 +204,18 @@ def send_test_email():
         return {"status": "error", "detail": f"SendGrid {e.code}: {detail}"}
     except Exception as e:
         return {"status": "error", "detail": str(e)}
+
+
+@app.get("/snowflake-logs")
+def get_snowflake_logs():
+    """Return agent action history from Snowflake."""
+    from agent.snowflake_log import query_snowflake
+    try:
+        rows = query_snowflake(limit=200)
+        # Snowflake timestamps are datetime objects — convert to ISO strings
+        for row in rows:
+            if hasattr(row.get("timestamp"), "isoformat"):
+                row["timestamp"] = row["timestamp"].isoformat()
+        return {"rows": rows}
+    except Exception as exc:
+        return {"rows": [], "error": str(exc)}

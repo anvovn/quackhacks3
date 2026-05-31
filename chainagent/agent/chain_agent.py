@@ -19,7 +19,7 @@ DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 SHOPIFY_CFG_PATH = DATA_DIR / "shopify-config.json"
 
 VELOCITY_DAYS = 30
-REORDER_THRESHOLD_DAYS = 21  # only analyze SKUs with less than this many days of stock
+REORDER_THRESHOLD_DAYS = 14  # only analyze SKUs with less than this many days of stock
 
 
 def strip_markdown(text):
