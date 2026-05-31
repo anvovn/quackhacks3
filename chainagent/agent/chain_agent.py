@@ -210,24 +210,6 @@ Be specific about urgency. End your response with exactly: REORDER_QTY: <number>
             if line.strip():
                 emit("THINK", line.strip())
 
-            # Step 2: Gemini drafts email using its own recommended qty
-            emit("ACT", "Drafting supplier email...")
-            email = strip_markdown(generate_text(
-                client,
-                f"Draft an urgent reorder email from Portland Optics to {sku['supplier_name']} for {reorder_qty} units of {sku['name']}. Current stock: {sku['stock']} units covering {days:.1f} days. Lead time: {sku['lead_time_days']} days. Sign off as 'Portland Optics Operations Team'. Use plain text only, no markdown, no placeholder text like [Your Name] or [Contact Information]."
-            ))
-            emit("EMAIL", email)
-            emit("REORDER", json.dumps({
-                "id": sku["id"],
-                "variant_id": sku.get("variant_id"),
-                "name": sku["name"],
-                "qty": reorder_qty,
-                "supplier": sku["supplier_name"],
-                "lead_time_days": sku["lead_time_days"],
-            }))
-            trigger_voice(sku, days)
-            trigger_email(sku, days)
-            log_snowflake(sku, reasoning, email, days)
         if reorder_qty == 0:
             emit("WATCH", f"{sku['name']} · Gemini recommends no reorder at this time")
             continue
