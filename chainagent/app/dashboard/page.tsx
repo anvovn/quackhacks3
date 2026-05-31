@@ -32,7 +32,6 @@ interface Invoice {
   amount: string; amountRaw: number; due: string
   status: "due-soon" | "upcoming" | "paid"; payable: boolean; paid: boolean
 }
-interface DeliveryCountry { flag: string; name: string; days: string; pct: number; orders: string }
 interface ShopifyOrder {
   id: string; customer: string; email: string; sku: string; skuCode: string
   qty: number; financialStatus: string; fulfillmentStatus: string | null
@@ -287,7 +286,7 @@ function InventorySection({brand}:{brand:Brand}) {
   return (
     <>
       <SectionHeader eyebrow="// inventory" title="Inventory" hook="← /api/inventory"
-        action={<div style={{display:"flex",gap:8}}><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search SKUs..." style={{...S.mono,fontSize:11,background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:6,padding:"6px 11px",color:"var(--text)",outline:"none",width:160}}/><Btn variant="primary">+ Add SKU</Btn></div>}/>
+        action={<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search SKUs..." style={{...S.mono,fontSize:11,background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:6,padding:"6px 11px",color:"var(--text)",outline:"none",width:160}}/>}/>
       <Panel>
         <RowHead cols="2fr 70px 85px 75px 120px 80px 80px 90px"><Th>Product</Th><Th>Stock</Th><Th>Incoming</Th><Th>Velocity</Th><Th>Runway</Th><Th>Lead Time</Th><Th>COGS</Th><Th>Risk</Th></RowHead>
         {filtered.map(sku=>(
@@ -310,7 +309,7 @@ function InventorySection({brand}:{brand:Brand}) {
 function InboundsSection() {
   return (
     <>
-      <SectionHeader eyebrow="// stock inbounds" title="Stock Inbounds" action={<Btn variant="primary">+ Create Inbound</Btn>}/>
+      <SectionHeader eyebrow="// stock inbounds" title="Stock Inbounds"/>
       <Panel>
         <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"48px 0",gap:10}}>
           <div style={{fontSize:28}}>📥</div>
@@ -388,14 +387,11 @@ function OrdersSection({orders: allOrders}:{orders:ShopifyOrder[]}) {
   )
 }
 
-function SuppliersSection({suppliers: initSuppliers, onGoToInbounds}:{suppliers:Supplier[], onGoToInbounds:()=>void}) {
-  const [suppliers, setSuppliers] = useState(initSuppliers)
+function SuppliersSection({suppliers, onAdd, onGoToInbounds}:{suppliers:Supplier[], onAdd:(s:Supplier)=>void, onGoToInbounds:()=>void}) {
   const [expandedId, setExpandedId] = useState<string|null>(null)
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState({name:"",contact:"",email:"",location:"",leadTime:"",moq:"",terms:""})
   const [saved, setSaved] = useState(false)
-
-  useEffect(()=>setSuppliers(initSuppliers),[initSuppliers])
 
   function addSupplier() {
     if(!form.name) return
@@ -406,7 +402,7 @@ function SuppliersSection({suppliers: initSuppliers, onGoToInbounds}:{suppliers:
       terms:form.terms||undefined, rating:3, since:new Date().getFullYear().toString(),
       tags:["manual"], notes:undefined,
     }
-    setSuppliers(prev=>[...prev,s])
+    onAdd(s)
     setSaved(true)
     setTimeout(()=>{setShowModal(false);setSaved(false);setForm({name:"",contact:"",email:"",location:"",leadTime:"",moq:"",terms:""})},700)
   }
@@ -529,10 +525,20 @@ function InvoicesSection({invoices: initInvoices}:{invoices:Invoice[]}) {
 
   return (
     <>
-      <SectionHeader eyebrow="// invoice payments" title="Invoice Payments" hook="← /api/invoices"
-        action={<div style={{...S.mono,fontSize:12,color:"var(--muted)"}}>Outstanding: <span style={{color:"var(--amber)",fontWeight:500}}>${outstanding.toLocaleString()}</span></div>}/>
+      <SectionHeader eyebrow="// payments" title="Supplier Payments"
+        action={outstanding>0?<div style={{...S.mono,fontSize:12,color:"var(--muted)"}}>Outstanding: <span style={{color:"var(--amber)",fontWeight:500}}>${outstanding.toLocaleString()}</span></div>:undefined}/>
       <Panel>
-        <RowHead cols="1fr 100px 110px 110px 110px"><Th>Invoice</Th><Th>Amount</Th><Th>Due Date</Th><Th>Status</Th><Th>Action</Th></RowHead>
+        {invoices.length===0?(
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"48px 0",gap:10}}>
+            <div style={{fontSize:28}}>💳</div>
+            <div style={{...S.display,fontSize:15,fontWeight:700}}>No payments yet</div>
+            <div style={{...S.mono,fontSize:11,color:"var(--muted)",textAlign:"center" as const,maxWidth:340,lineHeight:1.7}}>
+              Payments appear here when ChainAgent emails a supplier and they confirm.<br/>
+              Run the agent and approve a reorder to get started.
+            </div>
+          </div>
+        ):(<>
+        <RowHead cols="1fr 100px 110px 110px 110px"><Th>Reference</Th><Th>Amount</Th><Th>Due Date</Th><Th>Status</Th><Th>Action</Th></RowHead>
         {invoices.map((inv,i)=>(
           <div key={inv.ref} style={{display:"grid",gridTemplateColumns:"1fr 100px 110px 110px 110px",gap:10,padding:"13px 18px",borderBottom:i<invoices.length-1?"1px solid var(--border)":"none",alignItems:"center",opacity:inv.paid?0.55:1}}>
             <div>
@@ -553,73 +559,7 @@ function InvoicesSection({invoices: initInvoices}:{invoices:Invoice[]}) {
             )}
           </div>
         ))}
-      </Panel>
-    </>
-  )
-}
-
-function DeliverySection({countries}:{countries:DeliveryCountry[]}) {
-  function exportCSV() {
-    const header = "Country,Avg Days,On-Time Rate (%),Orders\n"
-    const rows = countries.map(c=>`"${c.name}",${c.days},${c.pct},"${c.orders}"`).join("\n")
-    const blob = new Blob([header+rows],{type:"text/csv"})
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href=url; a.download="delivery-performance.csv"; a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const avgDays = countries.length
-    ? (countries.reduce((s,c)=>s+parseFloat(c.days),0)/countries.length).toFixed(1)
-    : "—"
-  const avgOnTime = countries.length
-    ? Math.round(countries.reduce((s,c)=>s+c.pct,0)/countries.length)
-    : 0
-
-  return (
-    <>
-      <SectionHeader eyebrow="// delivery performance" title="Delivery Performance" hook="← /api/delivery"/>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
-        {[
-          {icon:"🚀",val:avgDays,   label:"AVG DELIVERY DAYS"},
-          {icon:"📦",val:`${avgOnTime}%`,label:"ON-TIME RATE"},
-          {icon:"🌍",val:"38",      label:"COUNTRIES SERVED"},
-        ].map((m,i)=>(
-          <div key={i} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:12,padding:"15px 17px"}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:9}}>
-              <div style={{width:30,height:30,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,background:"var(--accent-dim)"}}>{m.icon}</div>
-              <span style={{...S.mono,fontSize:10,padding:"2px 7px",borderRadius:100,background:"var(--accent-dim)",color:"var(--accent)"}}>Global</span>
-            </div>
-            <div style={{...S.display,fontSize:26,fontWeight:800,letterSpacing:"-0.03em",lineHeight:1}}>{m.val}</div>
-            <div style={{...S.mono,fontSize:9,color:"var(--muted)",marginTop:4,letterSpacing:"0.05em"}}>{m.label}</div>
-          </div>
-        ))}
-      </div>
-      <Panel>
-        <PanelHeader title="🌍 Delivery by Country" actions={<Btn onClick={exportCSV}>↓ Export CSV</Btn>}/>
-        <RowHead cols="1fr 90px 150px 70px"><Th>Country</Th><Th>Avg Days</Th><Th>On-Time Rate</Th><Th>Orders</Th></RowHead>
-        {countries.map(c=>(
-          <div key={c.name} style={{display:"grid",gridTemplateColumns:"1fr 90px 150px 70px",gap:10,padding:"11px 18px",borderBottom:"1px solid var(--border)",alignItems:"center",fontSize:12}}>
-            <div style={{fontWeight:500}}>{c.flag} {c.name}</div>
-            <div style={{...S.mono,fontSize:12}}>{c.days} days</div>
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <div style={{flex:1,height:4,background:"var(--surface3)",borderRadius:2}}>
-                <div style={{width:`${c.pct}%`,height:"100%",background:"var(--accent)",borderRadius:2}}/>
-              </div>
-              <span style={{...S.mono,fontSize:10,color:"var(--accent)"}}>{c.pct}%</span>
-            </div>
-            <div style={{...S.mono,fontSize:12}}>{c.orders}</div>
-          </div>
-        ))}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 90px 150px 70px",gap:10,padding:"11px 18px",alignItems:"center",fontSize:12,color:"var(--muted)"}}>
-          <div>+ 29 more countries</div>
-          <div style={{...S.mono,fontSize:11}}>6.2 avg</div>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <div style={{flex:1,height:4,background:"var(--surface3)",borderRadius:2}}><div style={{width:"92%",height:"100%",background:"var(--muted)",borderRadius:2}}/></div>
-            <span style={{...S.mono,fontSize:10}}>92%</span>
-          </div>
-          <div style={{...S.mono,fontSize:11}}>3,600</div>
-        </div>
+        </>)}
       </Panel>
     </>
   )
@@ -834,8 +774,8 @@ function SettingsSection() {
 }
 
 // ── AGENT SECTION ──
-function AgentSection({brand,agentRunning,trace,showEmail,emailResult,showReply,cdVal,emailContent,onRun,onReset,onApprove,onCancel}:{
-  brand:Brand,agentRunning:boolean,trace:TraceLine[],showEmail:boolean,emailResult:string,showReply:boolean,cdVal:string,emailContent:string,
+function AgentSection({brand,supplierEmail,supplierName,agentRunning,trace,showEmail,emailResult,showReply,cdVal,emailContent,onRun,onReset,onApprove,onCancel}:{
+  brand:Brand,supplierEmail:string,supplierName:string,agentRunning:boolean,trace:TraceLine[],showEmail:boolean,emailResult:string,showReply:boolean,cdVal:string,emailContent:string,
   onRun:()=>void,onReset:()=>void,onApprove:()=>void,onCancel:()=>void
 }) {
   const traceRef = useRef<HTMLDivElement>(null)
@@ -876,8 +816,13 @@ function AgentSection({brand,agentRunning,trace,showEmail,emailResult,showReply,
         <div className="email-panel" style={{background:"var(--surface)",border:"1px solid var(--border)",borderLeft:"3px solid var(--accent)",borderRadius:14,overflow:"hidden"}}>
           <PanelHeader title={<>📧 Drafted Supplier Email <BeHook>← claude_draft.py</BeHook></>}/>
           <div style={{padding:"12px 18px",borderBottom:"1px solid var(--border)"}}>
-            <div style={{display:"flex",gap:10,...S.mono,fontSize:12,padding:"4px 0"}}><span style={{color:"var(--muted)",minWidth:55}}>To:</span><span>{brand.email}</span></div>
-            <div style={{display:"flex",gap:10,...S.mono,fontSize:12,padding:"4px 0"}}><span style={{color:"var(--muted)",minWidth:55}}>Subject:</span><span>Urgent Reorder — {brand.skus[1]?.name||""} · 800 units</span></div>
+            <div style={{display:"flex",gap:10,...S.mono,fontSize:12,padding:"4px 0"}}>
+              <span style={{color:"var(--muted)",minWidth:55}}>To:</span>
+              {supplierEmail
+                ? <span>{supplierEmail} <span style={{color:"var(--muted)"}}> · {supplierName}</span></span>
+                : <span style={{color:"var(--amber)"}}>⚠ No email on file — add contact in Suppliers tab</span>}
+            </div>
+            <div style={{display:"flex",gap:10,...S.mono,fontSize:12,padding:"4px 0"}}><span style={{color:"var(--muted)",minWidth:55}}>Subject:</span><span>Urgent Reorder — {brand.skus[0]?.name||""} · {brand.skus[0]?.vel||""}</span></div>
           </div>
           <div style={{padding:"12px 18px",borderBottom:"1px solid var(--border)"}}>
             <div style={{...S.mono,fontSize:11,lineHeight:1.9,color:"var(--text)",background:"var(--surface2)",borderRadius:8,padding:"12px 14px",whiteSpace:"pre-wrap"}}>
@@ -897,7 +842,7 @@ function AgentSection({brand,agentRunning,trace,showEmail,emailResult,showReply,
           {showReply&&(
             <div className="supplier-reply" style={{background:"var(--surface2)",border:"1px solid rgba(34,197,94,0.2)",borderLeft:"3px solid #4ade80",borderRadius:10,padding:"12px 16px",margin:"0 18px 12px"}}>
               <div style={{...S.mono,fontSize:10,color:"#4ade80",marginBottom:6}}>✉ Supplier Reply · just now</div>
-              <div style={{...S.mono,fontSize:11,color:"var(--text)",lineHeight:1.7}}>Hi, confirmed — <strong>800 units</strong> available. Ships Monday. ETA 7 business days. Invoice to follow.<br/><br/>— {brand.supplier}</div>
+              <div style={{...S.mono,fontSize:11,color:"var(--text)",lineHeight:1.7}}>Hi, confirmed — <strong>800 units</strong> available. Ships Monday. ETA 7 business days. Invoice to follow.<br/><br/>— {supplierName||brand.supplier}</div>
             </div>
           )}
         </div>
@@ -928,21 +873,9 @@ export default function Dashboard() {
   const [scheduleOn, setScheduleOn]     = useState(true)
   const [cdSecs, setCdSecs]       = useState(7200)
   const [liveSkus, setLiveSkus]   = useState<RawSKU[] | "error" | null>(null)
-  const [auditRows, setAuditRows] = useState<AuditRow[]>([
-    {time:"Today 09:14",  action:"Reorder drafted · Portland Aviator Pro · 800 units · $10,000", sku:"DHOD5-EC999009", label:"Pending"},
-    {time:"Today 08:30",  action:"Agent cycle completed · 3 SKUs evaluated",                     sku:"all",           label:"Created"},
-    {time:"Yesterday",    action:"Inbound INB-2026-029 created · 400 units",                     sku:"DHOD5-EC999003", label:"Created"},
-    {time:"May 29",       action:"Invoice INV-2026-038 scheduled for Jun 10",                    sku:"—",             label:"Pending"},
-    {time:"May 28",       action:"Reorder approved & sent · 500 units",                          sku:"DHOD5-EC999002", label:"Sent"},
-    {time:"May 27",       action:"Stock sync completed · data refreshed from Shopify",           sku:"all",           label:"Created"},
-    {time:"May 26",       action:"Discrepancy flagged · INB-2026-025 · 50 unit shortfall",       sku:"DHOD5-EC999003", label:"Open"},
-    {time:"May 25",       action:"Invoice INV-2026-034 paid · $6,250",                           sku:"—",             label:"Paid"},
-    {time:"May 24",       action:"Reorder cancelled by founder · 200 units",                     sku:"DHOD5-EC999003", label:"Cancelled"},
-    {time:"May 22",       action:"New supplier vetted · Taipei Precision Eyewear",               sku:"—",             label:"Created"},
-  ])
-  const [suppliers,        setSuppliers]        = useState<Supplier[]>([])
+  const [auditRows, setAuditRows] = useState<AuditRow[]>([])
+  const [suppliers,        setSuppliers]        = useState<Supplier[]>([]) // populated by SuppliersSection internally
   const [invoices,         setInvoices]         = useState<Invoice[]>([])
-  const [deliveries,       setDeliveries]       = useState<DeliveryCountry[]>([])
   const [shopifyOrders,    setShopifyOrders]    = useState<ShopifyOrder[]>([])
   const [shopifyConnected, setShopifyConnected] = useState<boolean|null>(null)
   const cdInt = useRef<ReturnType<typeof setInterval>|null>(null)
@@ -976,8 +909,6 @@ export default function Dashboard() {
     function safeFetch<T>(url:string, setter:(v:T[])=>void) {
       fetch(url).then(r=>r.json()).then((d:T[]|{configured?:boolean})=>{ if(Array.isArray(d)) setter(d) }).catch(()=>{})
     }
-    safeFetch<Supplier>("/api/suppliers", setSuppliers)
-    safeFetch<DeliveryCountry>("/api/deliveries", setDeliveries)
     safeFetch<ShopifyOrder>("/api/orders", setShopifyOrders)
   },[])
 
@@ -1016,6 +947,13 @@ export default function Dashboard() {
     }
   })()
 
+  // Resolve supplier contact for the agent email (matches critical SKU's vendor in user's supplier list)
+  const agentSupplier = suppliers.find(s =>
+    s.name.toLowerCase() === (brand?.supplier || "").toLowerCase()
+  ) ?? suppliers[0] ?? null
+  const agentSupplierEmail = agentSupplier?.email || ""
+  const agentSupplierName  = agentSupplier?.name  || brand?.supplier || ""
+
   // Sync timer
   useEffect(()=>{
     const t=setInterval(()=>setSyncSecs(s=>s+1),1000)
@@ -1033,6 +971,17 @@ export default function Dashboard() {
     },1000)
     return ()=>clearInterval(t)
   },[scheduleOn])
+
+  // When supplier replies → confirm the pending payment and log it
+  useEffect(()=>{
+    if(!showReply) return
+    setInvoices(prev=>prev.map((inv,i)=>
+      i===0&&inv.status==="upcoming"?{...inv,status:"due-soon" as const,payable:true,desc:inv.desc+" · Supplier confirmed"}:inv
+    ))
+    const now=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})
+    setAuditRows(prev=>[{time:`Today ${now}`,action:`Supplier confirmed reorder · invoice pending`,sku:brand?.skus[0]?.id||"",label:"Created"},...prev])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[showReply])
 
   // Countdown for email approval
   useEffect(()=>{
@@ -1105,8 +1054,7 @@ export default function Dashboard() {
     {id:"inbounds",icon:"📥",label:"Monitor",badge:"1",badgeColor:"amber"},
     {id:"orders",  icon:"📦",label:"Monitor",badge:"2 issues",badgeColor:"red"},
     {id:"suppliers",icon:"◉",label:"Manage"},
-    {id:"invoices",icon:"💳",label:"Manage",badge:"$10k",badgeColor:"amber"},
-    {id:"delivery",icon:"🌍",label:"Manage"},
+    {id:"invoices",icon:"💳",label:"Manage"},
     {id:"logs",    icon:"≡", label:"Manage",badge:String(auditRows.length),badgeColor:"green"},
     {id:"notifications",icon:"🔔",label:"Manage"},
     {id:"settings",icon:"◎",label:"Manage"},
@@ -1193,7 +1141,7 @@ export default function Dashboard() {
                 {items.map(item=>(
                   <button key={item.id} id={`nav-${item.id}`} onClick={()=>setSection(item.id)} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 10px",borderRadius:8,cursor:"pointer",transition:"all 0.15s",color:section===item.id?"var(--accent)":"var(--muted2)",fontSize:13,border:section===item.id?"1px solid var(--accent-mid)":"none",background:section===item.id?"var(--accent-dim)":"none",width:"100%",textAlign:"left" as const}}>
                     <span style={{width:15,textAlign:"center" as const,flexShrink:0,fontSize:13}}>{item.icon}</span>
-                    {item.label==="Monitor"?["Overview","Run Agent","Inventory","Stock Inbounds","Orders"][navItems.findIndex(n=>n.id===item.id)]:["Suppliers","Invoices","Delivery Perf.","Audit Log","Notifications","Settings"][navItems.filter(n=>n.label==="Manage").findIndex(n=>n.id===item.id)]}
+                    {item.label==="Monitor"?["Overview","Run Agent","Inventory","Stock Inbounds","Orders"][navItems.findIndex(n=>n.id===item.id)]:["Suppliers","Payments","Audit Log","Notifications","Settings"][navItems.filter(n=>n.label==="Manage").findIndex(n=>n.id===item.id)]}
                     {item.badge&&<span style={{marginLeft:"auto",...S.mono,fontSize:9,padding:"2px 6px",borderRadius:100,background:item.badgeColor==="red"?"var(--red-dim)":item.badgeColor==="green"?"var(--accent-dim)":"var(--amber-dim)",color:item.badgeColor==="red"?"var(--red)":item.badgeColor==="green"?"var(--accent)":"var(--amber)"}}>{item.badge}</span>}
                   </button>
                 ))}
@@ -1246,16 +1194,15 @@ export default function Dashboard() {
             ) : (
               <>
                 {section==="overview"  &&<OverviewSection brand={brand} onRunAgent={()=>{setSection("agent");setTimeout(handleRunAgent,200)}} onViewAllReorders={()=>setSection("logs")}/>}
-                {section==="agent"     &&<AgentSection brand={brand} agentRunning={agentRunning} trace={stream.trace} showEmail={showEmail} emailResult={emailResult} showReply={showReply} cdVal={fmt(cdSecs)} onRun={handleRunAgent} onReset={handleReset} onApprove={handleApprove} onCancel={handleCancel} emailContent={stream.emailContent}/>}
+                {section==="agent"     &&<AgentSection brand={brand} supplierEmail={agentSupplierEmail} supplierName={agentSupplierName} agentRunning={agentRunning} trace={stream.trace} showEmail={showEmail} emailResult={emailResult} showReply={showReply} cdVal={fmt(cdSecs)} onRun={handleRunAgent} onReset={handleReset} onApprove={handleApprove} onCancel={handleCancel} emailContent={stream.emailContent}/>}
                 {section==="inventory" &&<InventorySection brand={brand}/>}
                 {section==="inbounds"  &&<InboundsSection/>}
                 {section==="orders"    &&<OrdersSection orders={shopifyOrders}/>}
               </>
             )
           )}
-          {section==="suppliers" && (shopifyConnected===null?null:shopifyConnected===false?<ShopifyGate onSettings={()=>setSection("settings")}/>:<SuppliersSection suppliers={suppliers} onGoToInbounds={()=>setSection("inbounds")}/>)}
+          {section==="suppliers" && (shopifyConnected===null?null:shopifyConnected===false?<ShopifyGate onSettings={()=>setSection("settings")}/>:<SuppliersSection suppliers={suppliers} onAdd={s=>setSuppliers(prev=>[...prev,s])} onGoToInbounds={()=>setSection("inbounds")}/>)}
           {section==="invoices"  && <InvoicesSection invoices={invoices}/>}
-          {section==="delivery"  && (shopifyConnected===null?null:shopifyConnected===false?<ShopifyGate onSettings={()=>setSection("settings")}/>:<DeliverySection countries={deliveries}/>)}
           {section==="logs"        &&<LogsSection auditRows={auditRows}/>}
           {section==="notifications"&&<NotificationsSection/>}
           {section==="settings"    &&<SettingsSection/>}
