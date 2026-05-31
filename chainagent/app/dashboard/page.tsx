@@ -488,11 +488,6 @@ function SuppliersSection({suppliers, onAdd, onUpdate}:{suppliers:Supplier[], on
                     ))}
                   </div>
                 </div>
-                {s.rating!=null && (
-                  <div style={{display:"flex",gap:1,flexShrink:0}}>
-                    {[1,2,3,4,5].map(n=><span key={n} style={{fontSize:11,color:n<=s.rating!?"var(--amber)":"var(--surface3)"}}>★</span>)}
-                  </div>
-                )}
               </div>
               <div style={{...S.mono,fontSize:10,color:"var(--muted)",lineHeight:1.9,marginBottom:6}}>
                 {s.contact && <>{s.contact}<br/></>}
@@ -751,7 +746,7 @@ function NotificationsSection() {
   )
 }
 
-type AgentSettings = { autoApprove:boolean; scheduleEnabled:boolean; scheduleIntervalHrs:number; autoSendWindowHrs:number; riskThresholdDays:number }
+type AgentSettings = { autoApprove:boolean; scheduleEnabled:boolean; scheduleIntervalMins:number; autoSendWindowMins:number; riskThresholdDays:number }
 
 function SettingsSection({agentSettings, onSaveSettings}:{agentSettings:AgentSettings, onSaveSettings:(s:AgentSettings)=>void}) {
   const { data: session } = useSession()
@@ -829,8 +824,8 @@ function SettingsSection({agentSettings, onSaveSettings}:{agentSettings:AgentSet
           ))}
           {([
             {key:"riskThresholdDays",  label:"Risk threshold (days)",    sub:"Flag SKUs below this runway"},
-            {key:"autoSendWindowHrs",  label:"Auto-send window (hrs)",   sub:"Hrs before auto-approve fires"},
-            {key:"scheduleIntervalHrs",label:"Schedule interval (hrs)",  sub:"How often agent auto-runs"},
+            {key:"autoSendWindowMins",  label:"Auto-send window (mins)",  sub:"Mins before auto-approve fires"},
+            {key:"scheduleIntervalMins",label:"Schedule interval (mins)", sub:"How often agent auto-runs"},
           ] as {key:keyof AgentSettings, label:string, sub:string}[]).map(({key,label,sub})=>(
             <div key={key} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 13px",background:"var(--surface2)",borderRadius:10,border:"1px solid var(--border)"}}>
               <div><div style={{fontSize:13,color:"var(--text)"}}>{label}</div><div style={{...S.mono,fontSize:10,color:"var(--muted)",marginTop:1}}>{sub}</div></div>
@@ -1036,10 +1031,10 @@ export default function Dashboard() {
   const [syncPhase, setSyncPhase] = useState<"idle"|"syncing"|"done">("idle")
   const [agentSettings, setAgentSettings] = useState({
     autoApprove: false, scheduleEnabled: false,
-    scheduleIntervalHrs: 2, autoSendWindowHrs: 2, riskThresholdDays: 14,
+    scheduleIntervalMins: 30, autoSendWindowMins: 120, riskThresholdDays: 14,
   })
-  const [scheduleSecs, setScheduleSecs] = useState(agentSettings.scheduleIntervalHrs * 3600)
-  const [cdSecs, setCdSecs]       = useState(agentSettings.autoSendWindowHrs * 3600)
+  const [scheduleSecs, setScheduleSecs] = useState(30 * 60)
+  const [cdSecs, setCdSecs]       = useState(120 * 60)
   const [liveSkus, setLiveSkus]   = useState<RawSKU[] | "error" | null>(null)
   const [auditRows, setAuditRows] = useState<AuditRow[]>([])
   const [suppliers,        setSuppliers]        = useState<Supplier[]>([])
@@ -1068,17 +1063,35 @@ export default function Dashboard() {
     try { localStorage.setItem(`chainagent:${userKey}:skuSupplierMap`, JSON.stringify(skuSupplierMap)) } catch {}
   },[userKey, skuSupplierMap])
 
-  // persist agent settings
+  // persist everything to localStorage keyed by user
   useEffect(()=>{
     try {
       const raw = localStorage.getItem(`chainagent:${userKey}:agentSettings`)
-      if(raw) setAgentSettings(JSON.parse(raw))
+      if(raw){
+        const saved = JSON.parse(raw)
+        // migrate old hrs fields to mins
+        if(saved.scheduleIntervalHrs!=null && saved.scheduleIntervalMins==null) saved.scheduleIntervalMins = saved.scheduleIntervalHrs * 60
+        if(saved.autoSendWindowHrs!=null && saved.autoSendWindowMins==null) saved.autoSendWindowMins = saved.autoSendWindowHrs * 60
+        setAgentSettings(s=>({...s,...saved}))
+      }
+      const rawOrders = localStorage.getItem(`chainagent:${userKey}:orders`)
+      if(rawOrders) setOrders(JSON.parse(rawOrders))
+      const rawAudit = localStorage.getItem(`chainagent:${userKey}:auditRows`)
+      if(rawAudit) setAuditRows(JSON.parse(rawAudit))
+      const rawSched = localStorage.getItem(`chainagent:${userKey}:scheduleTarget`)
+      if(rawSched){
+        const target = parseInt(rawSched)
+        const remaining = Math.floor((target - Date.now()) / 1000)
+        if(remaining > 0) setScheduleSecs(remaining)
+      }
     } catch {}
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[userKey])
-  useEffect(()=>{
-    try { localStorage.setItem(`chainagent:${userKey}:agentSettings`, JSON.stringify(agentSettings)) } catch {}
-  },[userKey, agentSettings])
+
+  useEffect(()=>{ try { localStorage.setItem(`chainagent:${userKey}:agentSettings`, JSON.stringify(agentSettings)) } catch {} },[userKey, agentSettings])
+  useEffect(()=>{ try { localStorage.setItem(`chainagent:${userKey}:orders`, JSON.stringify(orders)) } catch {} },[userKey, orders])
+  useEffect(()=>{ try { localStorage.setItem(`chainagent:${userKey}:auditRows`, JSON.stringify(auditRows)) } catch {} },[userKey, auditRows])
+
   const cdInt = useRef<ReturnType<typeof setInterval>|null>(null)
 
   // ── real backend hook ──
@@ -1168,12 +1181,14 @@ export default function Dashboard() {
   // Schedule countdown — auto-runs agent when interval expires
   useEffect(()=>{
     if(!agentSettings.scheduleEnabled) return
-    const interval = agentSettings.scheduleIntervalHrs * 3600
-    setScheduleSecs(interval)
+    const interval = agentSettings.scheduleIntervalMins * 60
+    // save target so it survives refresh
+    try { localStorage.setItem(`chainagent:${userKey}:scheduleTarget`, String(Date.now() + interval * 1000)) } catch {}
     const t = setInterval(()=>{
       setScheduleSecs(s=>{
         if(s<=1){
           handleRunAgent()
+          try { localStorage.setItem(`chainagent:${userKey}:scheduleTarget`, String(Date.now() + interval * 1000)) } catch {}
           return interval
         }
         return s-1
@@ -1181,7 +1196,7 @@ export default function Dashboard() {
     },1000)
     return ()=>clearInterval(t)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[agentSettings.scheduleEnabled, agentSettings.scheduleIntervalHrs])
+  },[agentSettings.scheduleEnabled, agentSettings.scheduleIntervalMins])
 
   // When supplier replies → confirm the pending PO
   useEffect(()=>{
@@ -1195,7 +1210,7 @@ export default function Dashboard() {
   // Countdown for email approval — auto-approves if setting is on
   useEffect(()=>{
     if(showEmail&&!emailResult){
-      const window = agentSettings.autoSendWindowHrs * 3600
+      const window = agentSettings.autoSendWindowMins * 60
       setCdSecs(window)
       cdInt.current=setInterval(()=>{
         setCdSecs(s=>{

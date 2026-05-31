@@ -55,6 +55,7 @@ export function useAgentStream(): UseAgentStreamResult {
   const statusTimer  = useRef<ReturnType<typeof setInterval> | null>(null)
   const replyTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
   const stagedReorderRef = useRef<Omit<PendingReorder,"created_at"> | null>(null)
+  const approvedRef  = useRef(false)
 
   // ── status polling ──────────────────────────────────────────────────────
   const pollStatus = useCallback(async () => {
@@ -109,9 +110,14 @@ export function useAgentStream(): UseAgentStreamResult {
         if (data.tag === "REORDER") {
           try {
             const parsed = JSON.parse(data.msg)
-            console.log("[ChainAgent] REORDER staged:", parsed)
+            console.log("[ChainAgent] REORDER received:", parsed)
             stagedReorderRef.current = parsed
             setStagedReorder(parsed)
+            // if user already approved before REORDER arrived, add immediately
+            if (approvedRef.current) {
+              setPendingReorders(prev => [...prev, { ...parsed, created_at: Date.now() }])
+              approvedRef.current = false
+            }
           } catch {}
         }
 
@@ -146,6 +152,7 @@ export function useAgentStream(): UseAgentStreamResult {
     setPendingReorders([])
     setStagedReorder(null)
     stagedReorderRef.current = null
+    approvedRef.current = false
 
     openStream()
 
@@ -170,8 +177,10 @@ export function useAgentStream(): UseAgentStreamResult {
       await fetch("/api/approve", { method: "POST" })
       if (stagedReorderRef.current) {
         setPendingReorders(prev => [...prev, { ...stagedReorderRef.current!, created_at: Date.now() }])
-        stagedReorderRef.current = null
-        setStagedReorder(null)
+        // keep stagedReorder in state so qty shows correctly in the reply message
+      } else {
+        // REORDER event hasn't arrived yet — flag so it gets added when it does
+        approvedRef.current = true
       }
       setEmailResult("✓ Email sent to supplier · Logged to Snowflake · Inbound auto-created")
       setAwaitingApproval(false)
@@ -209,6 +218,7 @@ export function useAgentStream(): UseAgentStreamResult {
     setPendingReorders([])
     stagedReorderRef.current = null
     setStagedReorder(null)
+    approvedRef.current = false
     if (replyTimer.current) clearTimeout(replyTimer.current)
   }, [closeStream])
 
