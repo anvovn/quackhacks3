@@ -52,6 +52,7 @@ export function useAgentStream(): UseAgentStreamResult {
   const esRef        = useRef<EventSource | null>(null)
   const statusTimer  = useRef<ReturnType<typeof setInterval> | null>(null)
   const replyTimer   = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const stagedReorderRef = useRef<Omit<PendingReorder,"created_at"> | null>(null)
 
   // ── status polling ──────────────────────────────────────────────────────
   const pollStatus = useCallback(async () => {
@@ -105,8 +106,7 @@ export function useAgentStream(): UseAgentStreamResult {
 
         if (data.tag === "REORDER") {
           try {
-            const reorder = JSON.parse(data.msg)
-            setPendingReorders(prev => [...prev, { ...reorder, created_at: Date.now() }])
+            stagedReorderRef.current = JSON.parse(data.msg)
           } catch {}
         }
 
@@ -160,6 +160,10 @@ export function useAgentStream(): UseAgentStreamResult {
   const approve = useCallback(async () => {
     try {
       await fetch("/api/approve", { method: "POST" })
+      if (stagedReorderRef.current) {
+        setPendingReorders(prev => [...prev, { ...stagedReorderRef.current!, created_at: Date.now() }])
+        stagedReorderRef.current = null
+      }
       setEmailResult("✓ Email sent to supplier · Logged to Snowflake · Inbound auto-created")
       setAwaitingApproval(false)
       const now = new Date().toLocaleTimeString("en-US", { hour12: false })
@@ -193,6 +197,7 @@ export function useAgentStream(): UseAgentStreamResult {
     setEmailResult("")
     setShowReply(false)
     setAwaitingApproval(false)
+    stagedReorderRef.current = null
     if (replyTimer.current) clearTimeout(replyTimer.current)
   }, [closeStream])
 

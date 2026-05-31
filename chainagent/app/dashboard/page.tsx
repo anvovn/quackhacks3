@@ -174,36 +174,6 @@ function BeHook({children}:{children:string}) {
   return <span style={{...S.mono,fontSize:9,color:"var(--blue)",background:"var(--blue-dim)",padding:"2px 7px",borderRadius:4,marginLeft:8}}>{children}</span>
 }
 
-function RefreshBtn({onClick}:{onClick?:()=>void}) {
-  const [phase, setPhase] = useState<"idle"|"loading"|"done">("idle")
-  function handleClick() {
-    if (phase !== "idle") return
-    setPhase("loading")
-    onClick?.()
-    setTimeout(() => {
-      setPhase("done")
-      setTimeout(() => setPhase("idle"), 1200)
-    }, 900)
-  }
-  const styles: Record<string, React.CSSProperties> = {
-    idle:    { background:"var(--surface)", color:"var(--muted2)", border:"1px solid var(--border2)" },
-    loading: { background:"var(--accent-dim)", color:"var(--accent)", border:"1px solid var(--accent-mid)" },
-    done:    { background:"rgba(34,197,94,0.12)", color:"#4ade80", border:"1px solid rgba(34,197,94,0.25)" },
-  }
-  const base: React.CSSProperties = {...S.mono,fontSize:11,fontWeight:500,letterSpacing:"0.04em",padding:"7px 13px",borderRadius:7,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:6,transition:"background 0.2s, color 0.2s, border-color 0.2s"}
-  return (
-    <button style={{...base,...styles[phase]}} onClick={handleClick}>
-      {phase === "done" ? (
-        <span style={{fontSize:12}}>✓</span>
-      ) : (
-        <span style={{display:"inline-block", animation: phase==="loading" ? "spin 0.7s linear infinite" : "none"}}>↻</span>
-      )}
-      {phase === "idle"    && "Refresh"}
-      {phase === "loading" && "Refreshing…"}
-      {phase === "done"    && "Updated"}
-    </button>
-  )
-}
 
 function SectionHeader({eyebrow,title,hook,action}:{eyebrow?:string,title:string,hook?:string,action?:React.ReactNode}) {
   return (
@@ -240,7 +210,7 @@ function OverviewSection({brand,onRunAgent,onViewAllReorders}:{brand:Brand,onRun
         ))}
       </div>
       <Panel>
-        <PanelHeader title={<>📊 Live SKU Risk Monitor <BeHook>← /api/inventory</BeHook></>} actions={<><RefreshBtn/><Btn variant="primary" onClick={onRunAgent}>▶ Run Agent</Btn></>}/>
+        <PanelHeader title={<>📊 Live SKU Risk Monitor <BeHook>← /api/inventory</BeHook></>} actions={<Btn variant="primary" onClick={onRunAgent}>▶ Run Agent</Btn>}/>
         <RowHead cols="2fr 70px 85px 75px 120px 95px 105px"><Th>Product</Th><Th>Stock</Th><Th>Incoming</Th><Th>Velocity</Th><Th>Runway</Th><Th>Risk</Th><Th>Agent</Th></RowHead>
         {brand.skus.map(sku=><SkuRow key={sku.id} sku={sku} cols="2fr 70px 85px 75px 120px 95px 105px" isOverview/>)}
       </Panel>
@@ -464,30 +434,42 @@ function OrdersSection({orders: allOrders}:{orders:ShopifyOrder[]}) {
   )
 }
 
-function SuppliersSection({suppliers, onAdd, onGoToInbounds}:{suppliers:Supplier[], onAdd:(s:Supplier)=>void, onGoToInbounds:()=>void}) {
+const BLANK_FORM = {name:"",contact:"",email:"",location:"",leadTime:"",moq:"",terms:""}
+
+function SuppliersSection({suppliers, onAdd, onUpdate}:{suppliers:Supplier[], onAdd:(s:Supplier)=>void, onUpdate:(s:Supplier)=>void}) {
   const [expandedId, setExpandedId] = useState<string|null>(null)
   const [showModal, setShowModal] = useState(false)
-  const [form, setForm] = useState({name:"",contact:"",email:"",location:"",leadTime:"",moq:"",terms:""})
+  const [editingSupplier, setEditingSupplier] = useState<Supplier|null>(null)
+  const [form, setForm] = useState(BLANK_FORM)
   const [saved, setSaved] = useState(false)
 
-  function addSupplier() {
+  function openAdd() { setEditingSupplier(null); setForm(BLANK_FORM); setShowModal(true) }
+  function openEdit(s:Supplier) {
+    setEditingSupplier(s)
+    setForm({name:s.name,contact:s.contact||"",email:s.email||"",location:s.location||"",leadTime:s.leadTime||"",moq:s.moq?String(s.moq):"",terms:s.terms||""})
+    setShowModal(true)
+  }
+
+  function saveSupplier() {
     if(!form.name) return
-    const s:Supplier = {
-      id:`MAN-${suppliers.length+1}`, name:form.name, skuCount:0, active:true, source:"manual",
-      contact:form.contact||undefined, email:form.email||undefined, location:form.location||undefined,
-      leadTime:form.leadTime||undefined, moq:form.moq?parseInt(form.moq):undefined,
-      terms:form.terms||undefined, rating:3, since:new Date().getFullYear().toString(),
-      tags:["manual"], notes:undefined,
+    if(editingSupplier) {
+      onUpdate({...editingSupplier, name:form.name, contact:form.contact||undefined, email:form.email||undefined,
+        location:form.location||undefined, leadTime:form.leadTime||undefined,
+        moq:form.moq?parseInt(form.moq):undefined, terms:form.terms||undefined})
+    } else {
+      onAdd({id:`MAN-${Date.now()}`, name:form.name, skuCount:0, active:true, source:"manual",
+        contact:form.contact||undefined, email:form.email||undefined, location:form.location||undefined,
+        leadTime:form.leadTime||undefined, moq:form.moq?parseInt(form.moq):undefined,
+        terms:form.terms||undefined, rating:3, since:new Date().getFullYear().toString(), tags:["manual"]})
     }
-    onAdd(s)
     setSaved(true)
-    setTimeout(()=>{setShowModal(false);setSaved(false);setForm({name:"",contact:"",email:"",location:"",leadTime:"",moq:"",terms:""})},700)
+    setTimeout(()=>{setShowModal(false);setSaved(false);setForm(BLANK_FORM);setEditingSupplier(null)},700)
   }
 
   return (
     <>
       <SectionHeader eyebrow="// suppliers" title="Supplier Network"
-        action={<Btn variant="primary" onClick={()=>setShowModal(true)}>+ Add Supplier</Btn>}/>
+        action={<Btn variant="primary" onClick={openAdd}>+ Add Supplier</Btn>}/>
       {suppliers.length === 0 ? (
         <div style={{...S.mono,fontSize:12,color:"var(--muted)",textAlign:"center" as const,padding:"48px 0"}}>
           No suppliers found in your Shopify store. Product vendors will appear here automatically.
@@ -540,7 +522,7 @@ function SuppliersSection({suppliers, onAdd, onGoToInbounds}:{suppliers:Supplier
                 <Btn style={{fontSize:10,padding:"5px 10px"}} onClick={()=>setExpandedId(expandedId===s.id?null:s.id)}>
                   {expandedId===s.id?"✕ Close":"◉ Profile"}
                 </Btn>
-                <Btn variant="primary" style={{fontSize:10,padding:"5px 10px"}} onClick={onGoToInbounds}>+ Inbound</Btn>
+                <Btn style={{fontSize:10,padding:"5px 10px"}} onClick={()=>openEdit(s)}>✏ Edit</Btn>
               </div>
             </div>
           ))}
@@ -550,8 +532,8 @@ function SuppliersSection({suppliers, onAdd, onGoToInbounds}:{suppliers:Supplier
       {showModal&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.72)",backdropFilter:"blur(4px)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setShowModal(false)}>
           <div style={{background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:14,padding:24,width:420,maxWidth:"90vw"}} onClick={e=>e.stopPropagation()}>
-            <div style={{...S.display,fontSize:16,fontWeight:700,marginBottom:3}}>Add Supplier</div>
-            <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginBottom:18}}>Manually add a supplier not in Shopify.</div>
+            <div style={{...S.display,fontSize:16,fontWeight:700,marginBottom:3}}>{editingSupplier?"Edit Supplier":"Add Supplier"}</div>
+            <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginBottom:18}}>{editingSupplier?"Update contact info and terms.":"Manually add a supplier not in Shopify."}</div>
             {([
               {key:"name",    label:"Company Name *", placeholder:"e.g. Osaka Lens Works"},
               {key:"contact", label:"Contact Name",   placeholder:"e.g. Kenji Tanaka"},
@@ -568,10 +550,10 @@ function SuppliersSection({suppliers, onAdd, onGoToInbounds}:{suppliers:Supplier
               </div>
             ))}
             <div style={{display:"flex",gap:9,marginTop:4}}>
-              <Btn variant={saved?"ghost":"primary"} onClick={addSupplier} style={{flex:1,justifyContent:"center"}}>
-                {saved?"Saved ✓":"Save Supplier"}
+              <Btn variant={saved?"ghost":"primary"} onClick={saveSupplier} style={{flex:1,justifyContent:"center"}}>
+                {saved?"Saved ✓":editingSupplier?"Update Supplier":"Save Supplier"}
               </Btn>
-              <Btn onClick={()=>setShowModal(false)} style={{flex:1,justifyContent:"center"}}>Cancel</Btn>
+              <Btn onClick={()=>{setShowModal(false);setEditingSupplier(null);setForm(BLANK_FORM)}} style={{flex:1,justifyContent:"center"}}>Cancel</Btn>
             </div>
           </div>
         </div>
@@ -969,6 +951,9 @@ function ShopifyGate({onSettings}:{onSettings:()=>void}) {
 
 // ── MAIN COMPONENT ──
 export default function Dashboard() {
+  const { data: session } = useSession()
+  const userKey = session?.user?.email ?? "guest"
+
   const [section, setSection]     = useState("overview")
   const [syncSecs, setSyncSecs]   = useState(0)
   const [syncPhase, setSyncPhase] = useState<"idle"|"syncing"|"done">("idle")
@@ -978,11 +963,30 @@ export default function Dashboard() {
   const [liveSkus, setLiveSkus]   = useState<RawSKU[] | "error" | null>(null)
   const [auditRows, setAuditRows] = useState<AuditRow[]>([])
   const [suppliers,        setSuppliers]        = useState<Supplier[]>([])
-  const [skuSupplierMap,   setSkuSupplierMap]   = useState<Record<string,string>>({}) // skuId → supplierId
+  const [skuSupplierMap,   setSkuSupplierMap]   = useState<Record<string,string>>({})
   const [orders,           setOrders]           = useState<PurchaseOrder[]>([])
 
   const [shopifyOrders,    setShopifyOrders]    = useState<ShopifyOrder[]>([])
   const [shopifyConnected, setShopifyConnected] = useState<boolean|null>(null)
+
+  // ── persist suppliers + SKU map to localStorage keyed by signed-in email ──
+  useEffect(()=>{
+    try {
+      const raw = localStorage.getItem(`chainagent:${userKey}:suppliers`)
+      if(raw) setSuppliers(JSON.parse(raw))
+      const raw2 = localStorage.getItem(`chainagent:${userKey}:skuSupplierMap`)
+      if(raw2) setSkuSupplierMap(JSON.parse(raw2))
+    } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[userKey])
+
+  useEffect(()=>{
+    try { localStorage.setItem(`chainagent:${userKey}:suppliers`, JSON.stringify(suppliers)) } catch {}
+  },[userKey, suppliers])
+
+  useEffect(()=>{
+    try { localStorage.setItem(`chainagent:${userKey}:skuSupplierMap`, JSON.stringify(skuSupplierMap)) } catch {}
+  },[userKey, skuSupplierMap])
   const cdInt = useRef<ReturnType<typeof setInterval>|null>(null)
 
   // ── real backend hook ──
@@ -1332,7 +1336,7 @@ export default function Dashboard() {
               </>
             )
           )}
-          {section==="suppliers" && (shopifyConnected===null?null:shopifyConnected===false?<ShopifyGate onSettings={()=>setSection("settings")}/>:<SuppliersSection suppliers={suppliers} onAdd={s=>setSuppliers(prev=>[...prev,s])} onGoToInbounds={()=>setSection("inbounds")}/>)}
+          {section==="suppliers" && (shopifyConnected===null?null:shopifyConnected===false?<ShopifyGate onSettings={()=>setSection("settings")}/>:<SuppliersSection suppliers={suppliers} onAdd={s=>setSuppliers(prev=>[...prev,s])} onUpdate={s=>setSuppliers(prev=>prev.map(p=>p.id===s.id?s:p))}/>)}
           {section==="invoices"  && <SupplierOrdersSection orders={orders}/>}
           {section==="logs"        &&<LogsSection auditRows={auditRows}/>}
           {section==="notifications"&&<NotificationsSection/>}
