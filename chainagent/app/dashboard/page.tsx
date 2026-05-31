@@ -1436,14 +1436,8 @@ export default function Dashboard() {
             <div style={{...S.mono,fontSize:9,color:"var(--muted)",letterSpacing:"0.1em",textTransform:"uppercase" as const,marginBottom:6}}>Agent Schedule</div>
             <div style={{...S.display,fontSize:20,fontWeight:700,color:"var(--text)",letterSpacing:"-0.02em"}}>{fmt(scheduleSecs)}</div>
             <div style={{...S.mono,fontSize:9,color:"var(--muted)",marginTop:1}}>until next auto-run</div>
-            <div style={{display:"flex",alignItems:"center",gap:6,marginTop:9}}>
-              <input
-                type="number" min={1} value={agentSettings.scheduleIntervalMins}
-                onChange={e=>setAgentSettings(s=>({...s,scheduleIntervalMins:Math.max(1,parseInt(e.target.value)||1)}))}
-                style={{...S.mono,fontSize:11,width:52,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:6,padding:"4px 7px",color:"var(--text)",outline:"none"}}
-              />
-              <span style={{...S.mono,fontSize:10,color:"var(--muted)"}}>min</span>
-              <span style={{marginLeft:"auto",fontSize:11,color:"var(--muted2)"}}>Auto-run</span>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:9}}>
+              <span style={{fontSize:11,color:"var(--muted2)"}}>Auto-run</span>
               <Toggle on={agentSettings.scheduleEnabled} onChange={v=>setAgentSettings(s=>({...s,scheduleEnabled:v}))}/>
             </div>
           </div>
