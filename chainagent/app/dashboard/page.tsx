@@ -1503,9 +1503,9 @@ export default function Dashboard() {
     if(critSku){
       const ref=`PO-${now.getFullYear()}-${String(Date.now()).slice(-4)}`
       setOrders(prev=>[{ref,sku:critSku.name,skuId:critSku.id,supplier,supplierEmail:agentSupplierEmail,qty,orderDate:dateStr,eta:dateStr,status:"sent" as const},...prev])
-      setInbounds(prev=>[{id:`INB-${Date.now()}`,name:critSku.name,skuId:critSku.id,supplier,qty,approvedAt:dateStr,status:"pending" as const,poRef:ref},...prev])
+      setInbounds(prev=>[{id:`INB-${Date.now()}`,name:critSku.name,skuId:critSku.id,supplier,qty,variantId:stagedReorder?.variant_id??undefined,approvedAt:dateStr,status:"pending" as const,poRef:ref},...prev])
     }
-  },[stream, brand, agentReorderQty, agentSupplierEmail, agentSupplierName, setInbounds])
+  },[stream, brand, agentReorderQty, agentSupplierEmail, agentSupplierName, setInbounds, stagedReorder])
 
   const handleCancel = useCallback(()=>{
     if(cdInt.current)clearInterval(cdInt.current)
@@ -1657,7 +1657,7 @@ export default function Dashboard() {
       {simRunning&&(
         <div style={{position:"fixed",top:54,left:0,right:0,zIndex:40,background:simRunning?"#78350f":"#1c1917",borderBottom:"2px solid #f59e0b",padding:"6px 20px",display:"flex",alignItems:"center",gap:12,...S.mono,fontSize:11}}>
           <span style={{color:"#f59e0b",fontWeight:700}}>⏱ SIM</span>
-          <span style={{color:"var(--text)"}}>Day <strong>{simDay}</strong> · 30s = 1 day · inventory depleting at real velocity</span>
+          <span style={{color:"var(--text)"}}>Day <strong>{simDay}</strong> · 10s = 1 day · inventory depleting at real velocity</span>
           <div style={{flex:1}}/>
           <Btn onClick={toggleSim} style={{fontSize:10,padding:"3px 12px",background:simRunning?"rgba(239,68,68,0.2)":"rgba(34,197,94,0.15)",color:simRunning?"var(--red)":"var(--accent)",border:`1px solid ${simRunning?"rgba(239,68,68,0.4)":"rgba(34,197,94,0.3)"}`}}>
             {simRunning?"■ Stop Sim":"▶ Resume"}
