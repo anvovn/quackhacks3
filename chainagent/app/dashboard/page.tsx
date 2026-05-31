@@ -441,7 +441,7 @@ function OrdersSection({orders: allOrders}:{orders:ShopifyOrder[]}) {
 
   return (
     <>
-      <SectionHeader eyebrow="// order management" title="Customer Orders" hook="← /api/orders"/>
+      <SectionHeader eyebrow="// customer orders" title="Customer Orders" hook="← /api/orders"/>
       <Panel>
         {allOrders.length === 0 ? (
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"48px 0",gap:10}}>
