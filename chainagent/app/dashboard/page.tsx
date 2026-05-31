@@ -20,10 +20,12 @@ interface RawSKU {
 }
 interface AuditRow { time: string; action: string; sku: string; label: string }
 interface Supplier {
-  id: string; name: string; contact: string; email: string; phone: string
-  location: string; leadTime: string; moq: number; terms: string; rating: number
-  active: boolean; skus: number; since: string; tags: string[]; notes: string
-  onTimeRate: number; totalOrders: number; lastOrder: string
+  id: string; name: string; skuCount: number; active: boolean; source: "shopify"|"manual"
+  // optional manual fields:
+  contact?: string; email?: string; phone?: string; location?: string
+  leadTime?: string; moq?: number; terms?: string; rating?: number
+  since?: string; tags?: string[]; notes?: string
+  onTimeRate?: number; totalOrders?: number; lastOrder?: string
 }
 interface Invoice {
   ref: string; supplier: string; supplierEmail: string; desc: string
@@ -31,20 +33,10 @@ interface Invoice {
   status: "due-soon" | "upcoming" | "paid"; payable: boolean; paid: boolean
 }
 interface DeliveryCountry { flag: string; name: string; days: string; pct: number; orders: string }
-
-// ── BRAND DATA ──
-const BRANDS: Record<string, Brand> = {
-  portland: {
-    name:"Portland Optics", label:"brand: Portland Optics", days:"8.9", stock:"3,614",
-    incoming:"800", crit:"PORTLAND AVIATOR PRO",
-    agentTitle:"chainagent-runtime · brand: Portland Optics · 3 SKUs monitored",
-    supplier:"Guangzhou Optics Co.", email:"wei@guangzhou-optics.cn",
-    skus:[
-      {name:"Portland Classic Frame",  id:"DHOD5-EC999002",stock:"1,592",inc:"+300",   vel:"47/day",days:"33.9",pct:85, risk:"Healthy", rc:"risk-ok"},
-      {name:"Portland Aviator Pro",id:"DHOD5-EC999009",stock:"428",  inc:"+800 ↑", vel:"48/day",days:"8.9", pct:15, risk:"Critical",rc:"risk-critical"},
-      {name:"Portland Aviator Pro Amber", id:"DHOD5-EC999003",stock:"1,594",inc:"—",      vel:"31/day",days:"21.0",pct:42, risk:"Watch",   rc:"risk-watch"},
-    ]
-  }
+interface ShopifyOrder {
+  id: string; customer: string; email: string; sku: string; skuCode: string
+  qty: number; financialStatus: string; fulfillmentStatus: string | null
+  date: string; dest: string; total: string
 }
 
 const TAG_COLORS: Record<string,{bg:string,color:string}> = {
@@ -315,83 +307,82 @@ function InventorySection({brand}:{brand:Brand}) {
   )
 }
 
-function InboundsSection({brand}:{brand:Brand}) {
-  const [tab, setTab] = useState("all")
-  const inbounds = [
-    {status:"transit", name:`${brand.skus[1]?.name||""} Reorder`,ref:"INB-2026-031",units:800,eta:"May 31, 2026",tracking:"SF7492823"},
-    {status:"approval",name:`${brand.skus[2]?.name||brand.skus[0]?.name||""} Restock`,ref:"INB-2026-029",units:400,eta:"Jun 12, 2026",tracking:"Pending"},
-    {status:"discrepancy",name:`${brand.skus[2]?.name||""} ⚠`,ref:"INB-2026-025",units:150,eta:"May 20, 2026",tracking:"SF7389001"},
-  ]
-  const filtered = tab==="all"?inbounds:inbounds.filter(i=>i.status===tab)
-  const spType = (s:string) => s==="transit"?"transit":s==="approval"?"pending":s==="discrepancy"?"disc":"draft"
-  const spLabel = (s:string) => s==="transit"?"In Transit":s==="approval"?"Awaiting Approval":"Discrepancy"
+function InboundsSection() {
   return (
     <>
-      <SectionHeader eyebrow="// stock inbounds" title="Stock Inbounds" hook="← /api/inbounds" action={<Btn variant="primary">+ Create Inbound</Btn>}/>
+      <SectionHeader eyebrow="// stock inbounds" title="Stock Inbounds" action={<Btn variant="primary">+ Create Inbound</Btn>}/>
       <Panel>
-        <div style={{display:"flex",gap:6,padding:"12px 18px",borderBottom:"1px solid var(--border)",background:"var(--surface2)"}}>
-          {["all","approval","discrepancy"].map(t=>(
-            <button key={t} onClick={()=>setTab(t)} style={{...S.mono,fontSize:11,padding:"5px 12px",borderRadius:6,cursor:"pointer",border:tab===t?"1px solid var(--accent-mid)":"1px solid var(--border2)",background:tab===t?"var(--accent-dim)":"none",color:tab===t?"var(--accent)":"var(--muted2)"}}>
-              {t==="all"?"All Inbounds":t==="approval"?"Awaiting Approval":"Discrepancies"}
-            </button>
-          ))}
-        </div>
-        <RowHead cols="2fr 80px 140px 100px 90px 110px"><Th>Inbound</Th><Th>Units</Th><Th>Status</Th><Th>ETA</Th><Th>Tracking</Th><Th>Actions</Th></RowHead>
-        {filtered.map(inb=>(
-          <div key={inb.ref} style={{display:"grid",gridTemplateColumns:"2fr 80px 140px 100px 90px 110px",gap:10,padding:"12px 18px",borderBottom:"1px solid var(--border)",alignItems:"center",background:inb.status==="discrepancy"?"rgba(239,68,68,0.03)":inb.status==="approval"?"rgba(245,158,11,0.04)":"transparent"}}>
-            <div><div style={{fontSize:13,fontWeight:500,color:"var(--text)"}}>{inb.name}</div><div style={{...S.mono,fontSize:9,color:"var(--muted)"}}>{inb.ref} · {brand.supplier}</div></div>
-            <div style={{...S.mono,fontSize:12,color:inb.status==="discrepancy"?"var(--red)":"var(--text)"}}>{inb.units}</div>
-            <StatusPill label={spLabel(inb.status)} type={spType(inb.status) as any}/>
-            <div style={{...S.mono,fontSize:11}}>{inb.eta}</div>
-            <div style={{...S.mono,fontSize:10,color:"var(--muted)"}}>{inb.tracking}</div>
-            <div style={{display:"flex",gap:5}}>
-              {inb.status==="approval"&&<Btn variant="primary" style={{fontSize:10,padding:"4px 9px"}}>Approve</Btn>}
-              {inb.status==="discrepancy"&&<Btn variant="danger" style={{fontSize:10,padding:"4px 9px"}}>Report</Btn>}
-              {inb.status==="transit"&&<Btn style={{fontSize:10,padding:"4px 9px"}}>Track</Btn>}
-            </div>
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"48px 0",gap:10}}>
+          <div style={{fontSize:28}}>📥</div>
+          <div style={{...S.display,fontSize:15,fontWeight:700}}>No inbounds yet</div>
+          <div style={{...S.mono,fontSize:11,color:"var(--muted)",textAlign:"center" as const,maxWidth:320,lineHeight:1.7}}>
+            Inbound shipments will appear here when ChainAgent creates a reorder.<br/>
+            Approve a reorder in the Agent section to generate one.
           </div>
-        ))}
+        </div>
       </Panel>
     </>
   )
 }
 
-function OrdersSection({brand}:{brand:Brand}) {
+function OrdersSection({orders: allOrders}:{orders:ShopifyOrder[]}) {
   const [tab, setTab] = useState("all")
-  const orders = [
-    {tab:"done",  id:"ORD-29482",name:"J. Chen",      sku:brand.skus[1]?.name||"",qty:2,status:"Shipped",  st:"transit",dest:"New York"},
-    {tab:"issue", id:"ORD-29481",name:"⚠ Address issue",sku:brand.skus[0]?.name||"",qty:1,status:"Issue",    st:"disc",   dest:"London"},
-    {tab:"hold",  id:"ORD-29480",name:"⚠ Payment hold",sku:brand.skus[1]?.name||"",qty:3,status:"On Hold",  st:"pending", dest:"Sydney"},
-    {tab:"done",  id:"ORD-29479",name:"M. Patel",     sku:brand.skus[2]?.name||brand.skus[0]?.name||"",qty:1,status:"Fulfilled",st:"live",dest:"Toronto"},
-    {tab:"done",  id:"ORD-29478",name:"S. Kim",       sku:brand.skus[0]?.name||"",qty:2,status:"Fulfilled",st:"live",   dest:"Berlin"},
-  ]
-  const filtered = tab==="all"?orders:orders.filter(o=>o.tab===tab)
+
+  function classify(o:ShopifyOrder) {
+    if(o.financialStatus==="voided"||o.financialStatus==="refunded") return "issue"
+    if(o.financialStatus==="pending"||o.fulfillmentStatus===null) return "hold"
+    return "done"
+  }
+
+  const tagged = allOrders.map(o=>({...o,tab:classify(o)}))
+  const filtered = tab==="all"?tagged:tagged.filter(o=>o.tab===tab)
+
+  function statusPillType(o:ShopifyOrder): React.ComponentProps<typeof StatusPill>["type"] {
+    if(o.financialStatus==="voided"||o.financialStatus==="refunded") return "disc"
+    if(o.fulfillmentStatus==="fulfilled") return "live"
+    if(o.fulfillmentStatus==="partial") return "transit"
+    if(o.financialStatus==="pending") return "pending"
+    return "draft"
+  }
+  function statusLabel(o:ShopifyOrder) {
+    if(o.financialStatus==="voided") return "Voided"
+    if(o.financialStatus==="refunded") return "Refunded"
+    if(o.fulfillmentStatus==="fulfilled") return "Fulfilled"
+    if(o.fulfillmentStatus==="partial") return "Partial"
+    if(o.financialStatus==="pending") return "Pending"
+    return "Unfulfilled"
+  }
+
   return (
     <>
-      <SectionHeader eyebrow="// order management" title="Orders" hook="← /api/orders" action={<Btn variant="primary">+ New Order</Btn>}/>
+      <SectionHeader eyebrow="// order management" title="Orders" hook="← /api/orders"/>
       <Panel>
-        <div style={{display:"flex",gap:6,padding:"12px 18px",borderBottom:"1px solid var(--border)",background:"var(--surface2)"}}>
-          {["all","issue","hold","done"].map(t=>(
-            <button key={t} onClick={()=>setTab(t)} style={{...S.mono,fontSize:11,padding:"5px 12px",borderRadius:6,cursor:"pointer",border:tab===t?"1px solid var(--accent-mid)":"1px solid var(--border2)",background:tab===t?"var(--accent-dim)":"none",color:tab===t?"var(--accent)":"var(--muted2)"}}>
-              {t==="all"?"All":t==="issue"?"Issues":t==="hold"?"On Hold":"Fulfilled"}
-            </button>
-          ))}
-        </div>
-        <RowHead cols="1fr 110px 60px 100px 80px 130px"><Th>Order</Th><Th>SKU</Th><Th>Qty</Th><Th>Status</Th><Th>Dest.</Th><Th>Actions</Th></RowHead>
-        {filtered.map(o=>(
-          <div key={o.id} style={{display:"grid",gridTemplateColumns:"1fr 110px 60px 100px 80px 130px",gap:10,padding:"12px 18px",borderBottom:"1px solid var(--border)",alignItems:"center",background:o.tab==="issue"?"rgba(239,68,68,0.03)":o.tab==="hold"?"rgba(245,158,11,0.04)":"transparent"}}>
-            <div><div style={{fontSize:12,fontWeight:500,color:"var(--text)"}}>{o.id} · {o.name}</div><div style={{...S.mono,fontSize:9,color:"var(--muted)"}}>May 30</div></div>
-            <div style={{...S.mono,fontSize:11,color:"var(--muted2)"}}>{o.sku.split(" ").slice(0,2).join(" ")}</div>
-            <div style={{...S.mono,fontSize:12}}>{o.qty}</div>
-            <StatusPill label={o.status} type={o.st as any}/>
-            <div style={{...S.mono,fontSize:11,color:"var(--muted)"}}>{o.dest}</div>
-            <div style={{display:"flex",gap:4}}>
-              {o.tab==="issue"&&<><Btn variant="danger" style={{fontSize:10,padding:"3px 8px"}}>Fix</Btn><Btn variant="amber" style={{fontSize:10,padding:"3px 8px"}}>Hold</Btn></>}
-              {o.tab==="hold"&&<Btn variant="primary" style={{fontSize:10,padding:"3px 9px"}}>Release</Btn>}
-              {o.tab==="done"&&<Btn style={{fontSize:10,padding:"3px 9px"}}>View</Btn>}
-            </div>
+        {allOrders.length === 0 ? (
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"48px 0",gap:10}}>
+            <div style={{fontSize:28}}>📦</div>
+            <div style={{...S.display,fontSize:15,fontWeight:700}}>No orders yet</div>
+            <div style={{...S.mono,fontSize:11,color:"var(--muted)"}}>Orders from your Shopify store will appear here.</div>
           </div>
-        ))}
+        ) : (<>
+          <div style={{display:"flex",gap:6,padding:"12px 18px",borderBottom:"1px solid var(--border)",background:"var(--surface2)"}}>
+            {["all","issue","hold","done"].map(t=>(
+              <button key={t} onClick={()=>setTab(t)} style={{...S.mono,fontSize:11,padding:"5px 12px",borderRadius:6,cursor:"pointer",border:tab===t?"1px solid var(--accent-mid)":"1px solid var(--border2)",background:tab===t?"var(--accent-dim)":"none",color:tab===t?"var(--accent)":"var(--muted2)"}}>
+                {t==="all"?"All":t==="issue"?"Issues":t==="hold"?"Unfulfilled":"Fulfilled"}
+              </button>
+            ))}
+          </div>
+          <RowHead cols="1fr 1fr 60px 110px 80px 70px"><Th>Order</Th><Th>Product</Th><Th>Qty</Th><Th>Status</Th><Th>Dest.</Th><Th>Total</Th></RowHead>
+          {filtered.map(o=>(
+            <div key={o.id} style={{display:"grid",gridTemplateColumns:"1fr 1fr 60px 110px 80px 70px",gap:10,padding:"12px 18px",borderBottom:"1px solid var(--border)",alignItems:"center",background:o.tab==="issue"?"rgba(239,68,68,0.03)":o.tab==="hold"?"rgba(245,158,11,0.04)":"transparent"}}>
+              <div><div style={{fontSize:12,fontWeight:500,color:"var(--text)"}}>{o.id}</div><div style={{...S.mono,fontSize:9,color:"var(--muted)"}}>{o.customer} · {o.date}</div></div>
+              <div style={{...S.mono,fontSize:10,color:"var(--muted2)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" as const}}>{o.sku}</div>
+              <div style={{...S.mono,fontSize:12}}>{o.qty}</div>
+              <StatusPill label={statusLabel(o)} type={statusPillType(o)}/>
+              <div style={{...S.mono,fontSize:11,color:"var(--muted)"}}>{o.dest}</div>
+              <div style={{...S.mono,fontSize:11}}>{o.total}</div>
+            </div>
+          ))}
+        </>)}
       </Panel>
     </>
   )
@@ -407,12 +398,13 @@ function SuppliersSection({suppliers: initSuppliers, onGoToInbounds}:{suppliers:
   useEffect(()=>setSuppliers(initSuppliers),[initSuppliers])
 
   function addSupplier() {
-    if(!form.name||!form.email) return
+    if(!form.name) return
     const s:Supplier = {
-      id:`SUP-${suppliers.length+1}`,name:form.name,contact:form.contact,email:form.email,
-      phone:"",location:form.location,leadTime:form.leadTime||"—",moq:parseInt(form.moq)||0,
-      terms:form.terms||"Net-30",rating:3,active:false,skus:0,since:new Date().getFullYear().toString(),
-      tags:["new"],notes:"",onTimeRate:0,totalOrders:0,lastOrder:"—"
+      id:`MAN-${suppliers.length+1}`, name:form.name, skuCount:0, active:true, source:"manual",
+      contact:form.contact||undefined, email:form.email||undefined, location:form.location||undefined,
+      leadTime:form.leadTime||undefined, moq:form.moq?parseInt(form.moq):undefined,
+      terms:form.terms||undefined, rating:3, since:new Date().getFullYear().toString(),
+      tags:["manual"], notes:undefined,
     }
     setSuppliers(prev=>[...prev,s])
     setSaved(true)
@@ -423,59 +415,74 @@ function SuppliersSection({suppliers: initSuppliers, onGoToInbounds}:{suppliers:
     <>
       <SectionHeader eyebrow="// suppliers" title="Supplier Network"
         action={<Btn variant="primary" onClick={()=>setShowModal(true)}>+ Add Supplier</Btn>}/>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
-        {suppliers.map(s=>(
-          <div key={s.id} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:10,padding:"14px 16px"}}>
-            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:6}}>
-              <div>
-                <div style={{fontSize:13,fontWeight:500,color:"var(--text)",marginBottom:4}}>{s.name}</div>
-                <div style={{display:"flex",gap:4,flexWrap:"wrap" as const}}>
-                  {s.tags.map(t=>(
-                    <span key={t} style={{...S.mono,fontSize:9,padding:"2px 6px",borderRadius:4,background:"var(--surface3)",color:"var(--muted2)"}}>{t}</span>
-                  ))}
+      {suppliers.length === 0 ? (
+        <div style={{...S.mono,fontSize:12,color:"var(--muted)",textAlign:"center" as const,padding:"48px 0"}}>
+          No suppliers found in your Shopify store. Product vendors will appear here automatically.
+        </div>
+      ) : (
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+          {suppliers.map(s=>(
+            <div key={s.id} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:10,padding:"14px 16px"}}>
+              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:6}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:500,color:"var(--text)",marginBottom:4}}>{s.name}</div>
+                  <div style={{display:"flex",gap:4,flexWrap:"wrap" as const}}>
+                    <span style={{...S.mono,fontSize:9,padding:"2px 6px",borderRadius:4,background:"var(--surface3)",color:"var(--muted2)"}}>{s.source}</span>
+                    {(s.tags||[]).map(t=>(
+                      <span key={t} style={{...S.mono,fontSize:9,padding:"2px 6px",borderRadius:4,background:"var(--surface3)",color:"var(--muted2)"}}>{t}</span>
+                    ))}
+                  </div>
                 </div>
+                {s.rating!=null && (
+                  <div style={{display:"flex",gap:1,flexShrink:0}}>
+                    {[1,2,3,4,5].map(n=><span key={n} style={{fontSize:11,color:n<=s.rating!?"var(--amber)":"var(--surface3)"}}>★</span>)}
+                  </div>
+                )}
               </div>
-              <div style={{display:"flex",gap:1,flexShrink:0}}>
-                {[1,2,3,4,5].map(n=><span key={n} style={{fontSize:11,color:n<=s.rating?"var(--amber)":"var(--surface3)"}}>★</span>)}
+              <div style={{...S.mono,fontSize:10,color:"var(--muted)",lineHeight:1.9,marginBottom:6}}>
+                {s.contact && <>{s.contact}<br/></>}
+                {s.email && <>{s.email}<br/></>}
+                {(s.location||s.leadTime) && <>{[s.location,s.leadTime&&`Lead: ${s.leadTime}`].filter(Boolean).join(" · ")}<br/></>}
+                {(s.moq||s.terms) && <>{[s.moq&&`MOQ: ${s.moq.toLocaleString()}`,s.terms].filter(Boolean).join(" · ")}<br/></>}
+              </div>
+              <div style={{...S.mono,fontSize:10,color:s.active?"var(--accent)":"var(--muted)",marginBottom:8,display:"flex",alignItems:"center",gap:4}}>
+                <span style={{width:6,height:6,borderRadius:"50%",background:s.active?"var(--accent)":"var(--muted)",display:"inline-block"}}/>
+                {s.active ? `Active · ${s.skuCount} SKU${s.skuCount!==1?"s":""}` : "Inactive"}
+                {s.since && ` · Since ${s.since}`}
+              </div>
+              {expandedId===s.id && (s.onTimeRate!=null||s.totalOrders!=null||s.notes) && (
+                <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:8,padding:"10px 12px",marginBottom:10,...S.mono,fontSize:10,color:"var(--muted2)",lineHeight:1.9}}>
+                  {s.phone && <div>Phone: {s.phone}</div>}
+                  {s.onTimeRate!=null && <div>On-time rate: <span style={{color:"var(--accent)"}}>{s.onTimeRate}%</span></div>}
+                  {s.totalOrders!=null && <div>Total orders: {s.totalOrders}</div>}
+                  {s.lastOrder && <div>Last order: {s.lastOrder}</div>}
+                  {s.notes && <div style={{color:"var(--muted)",marginTop:4,fontStyle:"italic"}}>{s.notes}</div>}
+                </div>
+              )}
+              <div style={{display:"flex",gap:7}}>
+                {s.email
+                  ? <Btn style={{fontSize:10,padding:"5px 10px"}} onClick={()=>window.open(`mailto:${s.email}?subject=Re: Supply Inquiry`)}>📧 Email</Btn>
+                  : <Btn style={{fontSize:10,padding:"5px 10px",opacity:0.4,cursor:"default"}}>📧 No email</Btn>
+                }
+                <Btn style={{fontSize:10,padding:"5px 10px"}} onClick={()=>setExpandedId(expandedId===s.id?null:s.id)}>
+                  {expandedId===s.id?"✕ Close":"◉ Profile"}
+                </Btn>
+                <Btn variant="primary" style={{fontSize:10,padding:"5px 10px"}} onClick={onGoToInbounds}>+ Inbound</Btn>
               </div>
             </div>
-            <div style={{...S.mono,fontSize:10,color:"var(--muted)",lineHeight:1.9,marginBottom:6}}>
-              Contact: {s.contact} · {s.email}<br/>
-              Location: {s.location} · Lead: {s.leadTime}<br/>
-              MOQ: {s.moq.toLocaleString()} · {s.terms}
-            </div>
-            <div style={{...S.mono,fontSize:10,color:s.active?"var(--accent)":"var(--muted)",marginBottom:8,display:"flex",alignItems:"center",gap:4}}>
-              <span style={{width:6,height:6,borderRadius:"50%",background:s.active?"var(--accent)":"var(--muted)",display:"inline-block"}}/>
-              {s.active?`Active · ${s.skus} SKUs`:"Inactive"} · Since {s.since}
-            </div>
-            {expandedId===s.id&&(
-              <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:8,padding:"10px 12px",marginBottom:10,...S.mono,fontSize:10,color:"var(--muted2)",lineHeight:1.9}}>
-                {s.phone&&<div>Phone: {s.phone}</div>}
-                <div>On-time rate: <span style={{color:"var(--accent)"}}>{s.onTimeRate}%</span> · Total orders: {s.totalOrders}</div>
-                <div>Last order: {s.lastOrder}</div>
-                {s.notes&&<div style={{color:"var(--muted)",marginTop:4,fontStyle:"italic"}}>{s.notes}</div>}
-              </div>
-            )}
-            <div style={{display:"flex",gap:7}}>
-              <Btn style={{fontSize:10,padding:"5px 10px"}} onClick={()=>window.open(`mailto:${s.email}?subject=Re: Portland Optics Supply Inquiry`)}>📧 Email</Btn>
-              <Btn style={{fontSize:10,padding:"5px 10px"}} onClick={()=>setExpandedId(expandedId===s.id?null:s.id)}>
-                {expandedId===s.id?"✕ Close":"◉ Profile"}
-              </Btn>
-              <Btn variant="primary" style={{fontSize:10,padding:"5px 10px"}} onClick={onGoToInbounds}>+ Inbound</Btn>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {showModal&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.72)",backdropFilter:"blur(4px)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setShowModal(false)}>
           <div style={{background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:14,padding:24,width:420,maxWidth:"90vw"}} onClick={e=>e.stopPropagation()}>
             <div style={{...S.display,fontSize:16,fontWeight:700,marginBottom:3}}>Add Supplier</div>
-            <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginBottom:18}}>New supplier saved to session.</div>
+            <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginBottom:18}}>Manually add a supplier not in Shopify.</div>
             {([
               {key:"name",    label:"Company Name *", placeholder:"e.g. Osaka Lens Works"},
               {key:"contact", label:"Contact Name",   placeholder:"e.g. Kenji Tanaka"},
-              {key:"email",   label:"Email *",        placeholder:"kenji@osaka-lens.jp"},
+              {key:"email",   label:"Email",          placeholder:"kenji@osaka-lens.jp"},
               {key:"location",label:"Location",       placeholder:"e.g. Osaka, Japan"},
               {key:"leadTime",label:"Lead Time",      placeholder:"e.g. 25 days"},
               {key:"moq",     label:"MOQ",            placeholder:"e.g. 500"},
@@ -899,16 +906,28 @@ function AgentSection({brand,agentRunning,trace,showEmail,emailResult,showReply,
   )
 }
 
+function ShopifyGate({onSettings}:{onSettings:()=>void}) {
+  return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:320,gap:12}}>
+      <div style={{fontSize:32}}>🛍</div>
+      <div style={{...S.display,fontSize:18,fontWeight:700}}>Connect your Shopify store</div>
+      <div style={{...S.mono,fontSize:11,color:"var(--muted)",textAlign:"center" as const,maxWidth:320,lineHeight:1.8}}>
+        Link your store in Settings → API Connections to pull live inventory, orders, and suppliers.
+      </div>
+      <Btn variant="primary" onClick={onSettings}>Go to Settings →</Btn>
+    </div>
+  )
+}
+
 // ── MAIN COMPONENT ──
 export default function Dashboard() {
   const [section, setSection]     = useState("overview")
-  const [brandId, setBrandId]     = useState("portland")
   const [syncSecs, setSyncSecs]   = useState(0)
   const [syncPhase, setSyncPhase] = useState<"idle"|"syncing"|"done">("idle")
   const [scheduleSecs, setScheduleSecs] = useState(7200)
   const [scheduleOn, setScheduleOn]     = useState(true)
   const [cdSecs, setCdSecs]       = useState(7200)
-  const [liveSkus, setLiveSkus]   = useState<RawSKU[] | null>(null)
+  const [liveSkus, setLiveSkus]   = useState<RawSKU[] | "error" | null>(null)
   const [auditRows, setAuditRows] = useState<AuditRow[]>([
     {time:"Today 09:14",  action:"Reorder drafted · Portland Aviator Pro · 800 units · $10,000", sku:"DHOD5-EC999009", label:"Pending"},
     {time:"Today 08:30",  action:"Agent cycle completed · 3 SKUs evaluated",                     sku:"all",           label:"Created"},
@@ -921,66 +940,80 @@ export default function Dashboard() {
     {time:"May 24",       action:"Reorder cancelled by founder · 200 units",                     sku:"DHOD5-EC999003", label:"Cancelled"},
     {time:"May 22",       action:"New supplier vetted · Taipei Precision Eyewear",               sku:"—",             label:"Created"},
   ])
-  const [suppliers,  setSuppliers]  = useState<Supplier[]>([])
-  const [invoices,   setInvoices]   = useState<Invoice[]>([])
-  const [deliveries, setDeliveries] = useState<DeliveryCountry[]>([])
+  const [suppliers,        setSuppliers]        = useState<Supplier[]>([])
+  const [invoices,         setInvoices]         = useState<Invoice[]>([])
+  const [deliveries,       setDeliveries]       = useState<DeliveryCountry[]>([])
+  const [shopifyOrders,    setShopifyOrders]    = useState<ShopifyOrder[]>([])
+  const [shopifyConnected, setShopifyConnected] = useState<boolean|null>(null)
   const cdInt = useRef<ReturnType<typeof setInterval>|null>(null)
 
   // ── real backend hook ──
   const stream = useAgentStream()
   const { agentRunning, showEmail, emailResult, showReply, backendOnline } = stream
 
-  // ── load real SKU data ──
+  // ── check Shopify connection status ──
+  useEffect(()=>{
+    fetch("/api/settings")
+      .then(r=>r.json())
+      .then(d=>setShopifyConnected(d.connected===true))
+      .catch(()=>setShopifyConnected(false))
+  },[])
+
+  // ── load real SKU data from Shopify ──
   useEffect(()=>{
     fetch("/api/skus")
-      .then(r=>r.json())
-      .then((data: RawSKU[])=>setLiveSkus(data))
-      .catch(()=>{}) // fall back to hardcoded BRANDS
-  },[])
-
-  // ── load suppliers / invoices / deliveries ──
-  useEffect(()=>{
-    fetch("/api/suppliers").then(r=>r.json()).then((d:Supplier[])=>setSuppliers(d)).catch(()=>{})
-    fetch("/api/invoices").then(r=>r.json()).then((d:Invoice[])=>setInvoices(d)).catch(()=>{})
-    fetch("/api/deliveries").then(r=>r.json()).then((d:DeliveryCountry[])=>setDeliveries(d)).catch(()=>{})
-  },[])
-
-  // Build the active brand: prefer live SKU data when loaded
-  const brand: Brand = (() => {
-    if (liveSkus) {
-      // Map raw SKUs into the dashboard SKU format
-      const mappedSkus: SKU[] = liveSkus.map((s, i) => {
-        const days = s.stock / s.velocity_per_day
-        const risk = days < s.lead_time_days ? "Critical" : days < s.lead_time_days * 2 ? "Watch" : "Healthy"
-        const pct  = Math.min(100, Math.round((days / (s.lead_time_days * 3)) * 100))
-        return {
-          name: s.name,
-          id: `SKU-${String(i+1).padStart(3,"0")}`,
-          stock: s.stock.toLocaleString(),
-          inc: "—",
-          vel: `${s.velocity_per_day}/day`,
-          days: days.toFixed(1),
-          pct,
-          risk,
-          rc: risk==="Critical"?"risk-critical":risk==="Watch"?"risk-watch":"risk-ok",
-        }
+      .then(r=>{ if(!r.ok) throw new Error("api"); return r.json() })
+      .then((data: RawSKU[] | {error?:string, configured?:boolean})=>{
+        if(Array.isArray(data)) setLiveSkus(data)
+        else if((data as {configured?:boolean}).configured===false) setLiveSkus([])
+        else setLiveSkus("error")
       })
-      const critSku = mappedSkus.reduce((a,b)=>parseFloat(a.days)<parseFloat(b.days)?a:b)
-      const totalStock = liveSkus.reduce((a,s)=>a+s.stock,0)
-      return {
-        name: "Live Inventory",
-        label: "brand: Live Data",
-        days: critSku.days,
-        stock: totalStock.toLocaleString(),
-        incoming: "—",
-        crit: critSku.name.toUpperCase(),
-        agentTitle: `chainagent-runtime · ${mappedSkus.length} SKUs monitored`,
-        supplier: liveSkus[0]?.supplier_name ?? "—",
-        email: "supplier@example.com",
-        skus: mappedSkus,
-      }
+      .catch(()=>setLiveSkus("error"))
+  },[])
+
+  // ── load Shopify suppliers / deliveries / orders ──
+  useEffect(()=>{
+    function safeFetch<T>(url:string, setter:(v:T[])=>void) {
+      fetch(url).then(r=>r.json()).then((d:T[]|{configured?:boolean})=>{ if(Array.isArray(d)) setter(d) }).catch(()=>{})
     }
-    return BRANDS[brandId]
+    safeFetch<Supplier>("/api/suppliers", setSuppliers)
+    safeFetch<DeliveryCountry>("/api/deliveries", setDeliveries)
+    safeFetch<ShopifyOrder>("/api/orders", setShopifyOrders)
+  },[])
+
+  // Build brand from live Shopify data only — no hardcoded fallback
+  const brand: Brand | null = (() => {
+    if (!Array.isArray(liveSkus) || liveSkus.length === 0) return null
+    const mappedSkus: SKU[] = liveSkus.map((s: RawSKU, i: number) => {
+      const days = s.stock / s.velocity_per_day
+      const risk = days < s.lead_time_days ? "Critical" : days < s.lead_time_days * 2 ? "Watch" : "Healthy"
+      const pct  = Math.min(100, Math.round((days / (s.lead_time_days * 3)) * 100))
+      return {
+        name: s.name,
+        id: s.id || `SKU-${String(i+1).padStart(3,"0")}`,
+        stock: s.stock.toLocaleString(),
+        inc: "—",
+        vel: `${s.velocity_per_day}/day`,
+        days: days.toFixed(1),
+        pct,
+        risk,
+        rc: risk==="Critical"?"risk-critical":risk==="Watch"?"risk-watch":"risk-ok",
+      }
+    })
+    const critSku = mappedSkus.reduce((a: SKU, b: SKU) => parseFloat(a.days) < parseFloat(b.days) ? a : b)
+    const totalStock = liveSkus.reduce((a: number, s: RawSKU) => a + s.stock, 0)
+    return {
+      name: "Portland Optics",
+      label: "brand: Portland Optics",
+      days: critSku.days,
+      stock: totalStock.toLocaleString(),
+      incoming: "—",
+      crit: critSku.name.toUpperCase(),
+      agentTitle: `chainagent-runtime · ${mappedSkus.length} SKUs monitored`,
+      supplier: liveSkus[0]?.supplier_name ?? "—",
+      email: "wei@guangzhou-optics.cn",
+      skus: mappedSkus,
+    }
   })()
 
   // Sync timer
@@ -1025,15 +1058,25 @@ export default function Dashboard() {
     if(cdInt.current)clearInterval(cdInt.current)
     stream.approve()
     const now=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})
-    setAuditRows(prev=>[{time:`Today ${now}`,action:"Reorder approved & sent · via ChainAgent",sku:brand.skus[0]?.id||"",label:"Sent"},...prev])
-  },[stream, brand.skus])
+    const critSku=brand?.skus.find(s=>s.risk==="Critical")||brand?.skus[0]
+    setAuditRows(prev=>[{time:`Today ${now}`,action:"Reorder approved & sent · via ChainAgent",sku:critSku?.id||"",label:"Sent"},...prev])
+    if(critSku){
+      const due=new Date(Date.now()+30*24*60*60*1000).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})
+      setInvoices(prev=>[{
+        ref:`INV-${new Date().getFullYear()}-${String(prev.length+42).padStart(3,"0")}`,
+        supplier:brand?.supplier||"Supplier",supplierEmail:brand?.email||"",
+        desc:`${critSku.name} reorder`,amount:"$10,000",amountRaw:10000,
+        due,status:"due-soon" as const,payable:true,paid:false,
+      },...prev])
+    }
+  },[stream, brand, setInvoices])
 
   const handleCancel = useCallback(()=>{
     if(cdInt.current)clearInterval(cdInt.current)
     stream.cancel()
     const now=new Date().toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})
-    setAuditRows(prev=>[{time:`Today ${now}`,action:"Reorder cancelled by founder",sku:brand.skus[0]?.id||"",label:"Cancelled"},...prev])
-  },[stream, brand.skus])
+    setAuditRows(prev=>[{time:`Today ${now}`,action:"Reorder cancelled by founder",sku:brand?.skus[0]?.id||"",label:"Cancelled"},...prev])
+  },[stream, brand])
 
   const handleReset = useCallback(()=>{
     stream.reset()
@@ -1045,7 +1088,10 @@ export default function Dashboard() {
     if (syncPhase !== "idle") return
     setSyncPhase("syncing")
     setSyncSecs(0)
-    fetch("/api/skus").then(r=>r.json()).then((data: RawSKU[])=>setLiveSkus(data)).catch(()=>{})
+    fetch("/api/skus")
+      .then(r=>{ if(!r.ok) throw new Error("api"); return r.json() })
+      .then((data: RawSKU[] | {error:string})=>setLiveSkus(Array.isArray(data) ? data : "error"))
+      .catch(()=>setLiveSkus("error"))
     setTimeout(()=>{
       setSyncPhase("done")
       setTimeout(()=>setSyncPhase("idle"), 1200)
@@ -1120,7 +1166,7 @@ export default function Dashboard() {
             </button>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8,background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:8,padding:"6px 12px",...S.mono,fontSize:11,color:"var(--text)"}}>
-            🏷 {brand.label}
+            🏷 {brand?.label ?? "portland-optics-65ovalib"}
           </div>
           <div style={{...S.mono,fontSize:10,color:"var(--muted)",background:"var(--surface2)",padding:"4px 10px",borderRadius:100,border:"1px solid var(--border)",cursor:"pointer"}} onClick={()=>setSection("settings")}>
             Next run: {fmt(scheduleSecs)}
@@ -1166,7 +1212,7 @@ export default function Dashboard() {
           </div>
           <div style={{marginTop:"auto",padding:12}}>
             <div style={{background:"var(--red-dim)",border:"1px solid rgba(239,68,68,0.2)",borderRadius:10,padding:10,marginBottom:7}}>
-              <div style={{...S.display,fontSize:20,fontWeight:800,color:"var(--red)",letterSpacing:"-0.02em"}}>{brand.days}</div>
+              <div style={{...S.display,fontSize:20,fontWeight:800,color:"var(--red)",letterSpacing:"-0.02em"}}>{brand?.days ?? "—"}</div>
               <div style={{...S.mono,fontSize:9,color:"var(--muted)",letterSpacing:"0.06em",marginTop:2}}>DAYS TO STOCKOUT</div>
             </div>
             <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:10,padding:10}}>
@@ -1178,14 +1224,38 @@ export default function Dashboard() {
 
         {/* MAIN */}
         <main style={{padding:"22px 26px",display:"flex",flexDirection:"column",gap:16,overflow:"hidden"}}>
-          {section==="overview"    &&<OverviewSection brand={brand} onRunAgent={()=>{setSection("agent");setTimeout(handleRunAgent,200)}} onViewAllReorders={()=>setSection("logs")}/>}
-          {section==="agent"       &&<AgentSection brand={brand} agentRunning={agentRunning} trace={stream.trace} showEmail={showEmail} emailResult={emailResult} showReply={showReply} cdVal={fmt(cdSecs)} onRun={handleRunAgent} onReset={handleReset} onApprove={handleApprove} onCancel={handleCancel} emailContent={stream.emailContent}/>}
-          {section==="inventory"   &&<InventorySection brand={brand}/>}
-          {section==="inbounds"    &&<InboundsSection brand={brand}/>}
-          {section==="orders"      &&<OrdersSection brand={brand}/>}
-          {section==="suppliers"   &&<SuppliersSection suppliers={suppliers} onGoToInbounds={()=>setSection("inbounds")}/>}
-          {section==="invoices"    &&<InvoicesSection invoices={invoices}/>}
-          {section==="delivery"    &&<DeliverySection countries={deliveries}/>}
+          {["overview","agent","inventory","inbounds","orders"].includes(section) && (
+            liveSkus === null ? (
+              <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:320,gap:12}}>
+                <span style={{display:"inline-block",animation:"spin 1s linear infinite",fontSize:22,color:"var(--accent)"}}>↻</span>
+                <div style={{...S.mono,fontSize:12,color:"var(--muted)"}}>Loading inventory from Shopify…</div>
+              </div>
+            ) : liveSkus === "error" ? (
+              <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:320,gap:10}}>
+                <div style={{fontSize:28}}>⚠</div>
+                <div style={{...S.display,fontSize:16,fontWeight:700,color:"var(--red)"}}>Shopify unreachable</div>
+                <div style={{...S.mono,fontSize:11,color:"var(--muted)",textAlign:"center" as const,maxWidth:340}}>Could not load inventory. Check Shopify credentials in Settings or retry.</div>
+                <Btn onClick={handleResync} style={{marginTop:8}}>↻ Retry</Btn>
+              </div>
+            ) : brand === null ? (
+              <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:320,gap:10}}>
+                <div style={{fontSize:28}}>📦</div>
+                <div style={{...S.display,fontSize:16,fontWeight:700}}>No products found</div>
+                <div style={{...S.mono,fontSize:11,color:"var(--muted)"}}>Add products to your Shopify store and resync.</div>
+              </div>
+            ) : (
+              <>
+                {section==="overview"  &&<OverviewSection brand={brand} onRunAgent={()=>{setSection("agent");setTimeout(handleRunAgent,200)}} onViewAllReorders={()=>setSection("logs")}/>}
+                {section==="agent"     &&<AgentSection brand={brand} agentRunning={agentRunning} trace={stream.trace} showEmail={showEmail} emailResult={emailResult} showReply={showReply} cdVal={fmt(cdSecs)} onRun={handleRunAgent} onReset={handleReset} onApprove={handleApprove} onCancel={handleCancel} emailContent={stream.emailContent}/>}
+                {section==="inventory" &&<InventorySection brand={brand}/>}
+                {section==="inbounds"  &&<InboundsSection/>}
+                {section==="orders"    &&<OrdersSection orders={shopifyOrders}/>}
+              </>
+            )
+          )}
+          {section==="suppliers" && (shopifyConnected===null?null:shopifyConnected===false?<ShopifyGate onSettings={()=>setSection("settings")}/>:<SuppliersSection suppliers={suppliers} onGoToInbounds={()=>setSection("inbounds")}/>)}
+          {section==="invoices"  && <InvoicesSection invoices={invoices}/>}
+          {section==="delivery"  && (shopifyConnected===null?null:shopifyConnected===false?<ShopifyGate onSettings={()=>setSection("settings")}/>:<DeliverySection countries={deliveries}/>)}
           {section==="logs"        &&<LogsSection auditRows={auditRows}/>}
           {section==="notifications"&&<NotificationsSection/>}
           {section==="settings"    &&<SettingsSection/>}
