@@ -1,0 +1,62 @@
+[
+  {
+    "ref": "INV-2026-041",
+    "supplier": "Guangzhou Optics Co.",
+    "supplierEmail": "wei@guangzhou-optics.cn",
+    "desc": "Portland Aviator Pro reorder · 800 units",
+    "amount": "$10,000",
+    "amountRaw": 10000,
+    "due": "Jun 3, 2026",
+    "status": "due-soon",
+    "payable": true,
+    "paid": false
+  },
+  {
+    "ref": "INV-2026-038",
+    "supplier": "Shenzhen Optical Partners Ltd.",
+    "supplierEmail": "amy@sz-optical.cn",
+    "desc": "Sample prototyping materials · batch 03",
+    "amount": "$3,000",
+    "amountRaw": 3000,
+    "due": "Jun 10, 2026",
+    "status": "upcoming",
+    "payable": false,
+    "paid": false
+  },
+  {
+    "ref": "INV-2026-035",
+    "supplier": "Taipei Precision Eyewear",
+    "supplierEmail": "lily@taipei-precision.tw",
+    "desc": "Lens samples · 50 units · evaluation batch",
+    "amount": "$1,250",
+    "amountRaw": 1250,
+    "due": "Jun 18, 2026",
+    "status": "upcoming",
+    "payable": false,
+    "paid": false
+  },
+  {
+    "ref": "INV-2026-034",
+    "supplier": "Guangzhou Optics Co.",
+    "supplierEmail": "wei@guangzhou-optics.cn",
+    "desc": "Portland Classic Frame restock · 500 units",
+    "amount": "$6,250",
+    "amountRaw": 6250,
+    "due": "May 14, 2026",
+    "status": "paid",
+    "payable": false,
+    "paid": true
+  },
+  {
+    "ref": "INV-2026-031",
+    "supplier": "Guangzhou Optics Co.",
+    "supplierEmail": "wei@guangzhou-optics.cn",
+    "desc": "Portland Aviator Pro Amber batch · 600 units",
+    "amount": "$7,500",
+    "amountRaw": 7500,
+    "due": "Apr 28, 2026",
+    "status": "paid",
+    "payable": false,
+    "paid": true
+  }
+]
