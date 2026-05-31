@@ -650,8 +650,9 @@ function AgentInquiriesPanel() {
   )
 }
 
-function OrderHistorySection({orders, auditRows, inbounds, onUpdateOrder}:{orders:PurchaseOrder[], auditRows:AuditRow[], inbounds:StockInbound[], onUpdateOrder:(ref:string, status:PurchaseOrder["status"])=>void}) {
+function OrderHistorySection({orders, auditRows, inbounds, onUpdateOrder, onClearHistory}:{orders:PurchaseOrder[], auditRows:AuditRow[], inbounds:StockInbound[], onUpdateOrder:(ref:string, status:PurchaseOrder["status"])=>void, onClearHistory:()=>void}) {
   const [activeTab, setActiveTab] = useState<"orders"|"inquiries">("orders")
+  const [confirmClear, setConfirmClear] = useState(false)
 
   const pillType = (s:PurchaseOrder["status"]):React.ComponentProps<typeof StatusPill>["type"] =>
     s==="received"?"live":s==="in-transit"?"transit":s==="confirmed"?"pending":"draft"
@@ -680,9 +681,20 @@ function OrderHistorySection({orders, auditRows, inbounds, onUpdateOrder}:{order
         title={activeTab==="orders" ? "Agent Orders" : "Agent Inquiries"}
         action={
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            {activeTab==="orders" && <>
-              <Btn onClick={exportCSV}>↓ Export CSV</Btn>
-            </>}
+            {activeTab==="orders" && (
+              confirmClear ? (
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{...S.mono,fontSize:11,color:"var(--muted)"}}>Clear all orders and activity?</span>
+                  <Btn style={{color:"var(--red)",borderColor:"rgba(239,68,68,0.4)"}} onClick={()=>{onClearHistory();setConfirmClear(false)}}>Yes, clear</Btn>
+                  <Btn onClick={()=>setConfirmClear(false)}>Cancel</Btn>
+                </div>
+              ) : (
+                <>
+                  <Btn onClick={exportCSV}>↓ Export CSV</Btn>
+                  <Btn style={{color:"var(--muted)"}} onClick={()=>setConfirmClear(true)}>✕ Clear History</Btn>
+                </>
+              )
+            )}
             <div style={{display:"flex",gap:4}}>
               <button style={tabBtnStyle(activeTab==="orders")}    onClick={()=>setActiveTab("orders")}>Orders</button>
               <button style={tabBtnStyle(activeTab==="inquiries")} onClick={()=>setActiveTab("inquiries")}>Inquiries</button>
@@ -969,7 +981,7 @@ function ApiKeysPanel() {
   )
 }
 
-type AgentSettings = { autoApprove:boolean; scheduleEnabled:boolean; scheduleIntervalMins:number; autoSendWindowMins:number; riskThresholdDays:number }
+type AgentSettings = { autoApprove:boolean; scheduleEnabled:boolean; scheduleIntervalMins:number; autoSendWindowMins:number; riskThresholdDays:number; autoResyncEnabled:boolean; autoResyncSecs:number }
 
 function SettingsSection({agentSettings, onSaveSettings}:{agentSettings:AgentSettings, onSaveSettings:(s:AgentSettings)=>void}) {
   const { data: session } = useSession()
@@ -1037,8 +1049,9 @@ function SettingsSection({agentSettings, onSaveSettings}:{agentSettings:AgentSet
         <PanelHeader title="◎ Agent Configuration"/>
         <div style={{padding:16,display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
           {([
-            {key:"autoApprove",    label:"Auto-approve reorders", sub:"Send without manual approval"},
-            {key:"scheduleEnabled",label:"Auto-schedule agent",   sub:"Run on set interval"},
+            {key:"autoApprove",      label:"Auto-approve reorders", sub:"Send without manual approval"},
+            {key:"scheduleEnabled",  label:"Auto-schedule agent",   sub:"Run on set interval"},
+            {key:"autoResyncEnabled",label:"Auto-resync inventory", sub:"Periodically pull from Shopify"},
           ] as {key:keyof AgentSettings, label:string, sub:string}[]).map(({key,label,sub})=>(
             <div key={key} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 13px",background:"var(--surface2)",borderRadius:10,border:"1px solid var(--border)"}}>
               <div><div style={{fontSize:13,color:"var(--text)"}}>{label}</div><div style={{...S.mono,fontSize:10,color:"var(--muted)",marginTop:1}}>{sub}</div></div>
@@ -1049,6 +1062,7 @@ function SettingsSection({agentSettings, onSaveSettings}:{agentSettings:AgentSet
             {key:"riskThresholdDays",  label:"Risk threshold (days)",    sub:"Flag SKUs below this runway"},
             {key:"autoSendWindowMins",  label:"Auto-send window (mins)",  sub:"Mins before auto-approve fires"},
             {key:"scheduleIntervalMins",label:"Schedule interval (mins)", sub:"How often agent auto-runs"},
+            {key:"autoResyncSecs",      label:"Auto-resync interval (s)", sub:"Seconds between inventory syncs"},
           ] as {key:keyof AgentSettings, label:string, sub:string}[]).map(({key,label,sub})=>(
             <div key={key} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 13px",background:"var(--surface2)",borderRadius:10,border:"1px solid var(--border)"}}>
               <div><div style={{fontSize:13,color:"var(--text)"}}>{label}</div><div style={{...S.mono,fontSize:10,color:"var(--muted)",marginTop:1}}>{sub}</div></div>
@@ -1252,9 +1266,11 @@ export default function Dashboard() {
   const [section, setSection]     = useState("overview")
   const [syncSecs, setSyncSecs]   = useState(0)
   const [syncPhase, setSyncPhase] = useState<"idle"|"syncing"|"done">("idle")
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date|null>(null)
   const [agentSettings, setAgentSettings] = useState({
     autoApprove: false, scheduleEnabled: false,
     scheduleIntervalMins: 0.5, autoSendWindowMins: 120, riskThresholdDays: 14,
+    autoResyncEnabled: true, autoResyncSecs: 30,
   })
   const [scheduleSecs, setScheduleSecs] = useState(30)
   const [cdSecs, setCdSecs]       = useState(120 * 60)
@@ -1514,15 +1530,17 @@ export default function Dashboard() {
       .catch(()=>setLiveSkus("error"))
     setTimeout(()=>{
       setSyncPhase("done")
+      setLastSyncedAt(new Date())
       setTimeout(()=>setSyncPhase("idle"), 1200)
     }, 1200)
   },[syncPhase])
 
-  // Auto-resync every 10 seconds
+  // Auto-resync on configured interval
   useEffect(()=>{
-    const t = setInterval(handleResync, 10_000)
+    if(!agentSettings.autoResyncEnabled) return
+    const t = setInterval(handleResync, agentSettings.autoResyncSecs * 1000)
     return ()=>clearInterval(t)
-  },[handleResync])
+  },[handleResync, agentSettings.autoResyncEnabled, agentSettings.autoResyncSecs])
 
   // ── Simulation ──
   const [simRunning, setSimRunning] = useState(false)
@@ -1618,9 +1636,6 @@ export default function Dashboard() {
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8,background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:8,padding:"6px 12px",...S.mono,fontSize:11,color:"var(--text)"}}>
             🏷 {brand?.label ?? "portland-optics-65ovalib"}
-          </div>
-          <div style={{...S.mono,fontSize:10,color:"var(--muted)",background:"var(--surface2)",padding:"4px 10px",borderRadius:100,border:"1px solid var(--border)",cursor:"pointer"}} onClick={()=>setSection("settings")}>
-            Next run: {fmt(scheduleSecs)}
           </div>
           <button onClick={toggleSim} style={{...S.mono,fontSize:10,padding:"5px 12px",borderRadius:100,cursor:"pointer",
             border:simRunning?"1px solid rgba(245,158,11,0.4)":"1px solid var(--border)",
@@ -1755,7 +1770,7 @@ export default function Dashboard() {
             )
           )}
           {section==="suppliers" && (shopifyConnected===null?null:shopifyConnected===false?<ShopifyGate onSettings={()=>setSection("settings")}/>:<SuppliersSection suppliers={suppliers} onAdd={s=>setSuppliers(prev=>[...prev,s])} onUpdate={s=>setSuppliers(prev=>prev.map(p=>p.id===s.id?s:p))}/>)}
-          {section==="history"   && <OrderHistorySection orders={orders} auditRows={auditRows} inbounds={inbounds} onUpdateOrder={(ref,status)=>setOrders(prev=>prev.map(p=>p.ref===ref?{...p,status}:p))}/>}
+          {section==="history"   && <OrderHistorySection orders={orders} auditRows={auditRows} inbounds={inbounds} onUpdateOrder={(ref,status)=>setOrders(prev=>prev.map(p=>p.ref===ref?{...p,status}:p))} onClearHistory={()=>{setOrders([]);setAuditRows([])}}/>}
           {section==="notifications"&&<NotificationsSection/>}
           {section==="settings"    &&<SettingsSection agentSettings={agentSettings} onSaveSettings={setAgentSettings}/>}
         </main>
