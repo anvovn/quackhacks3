@@ -6,6 +6,7 @@ import { signIn, signOut, useSession } from 'next-auth/react';
 export default function LoginPage() {
   const { data: session, status } = useSession();
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -31,12 +32,30 @@ export default function LoginPage() {
     await signOut({ callbackUrl: '/login' });
   }
 
-  function handleEmailLogin() {
+  async function handleEmailLogin() {
     if (!email || !password) {
       setError('Please enter your email and password');
       return;
     }
-    setError('Email sign-in is not configured. Use Continue with Google.');
+    setError('');
+    setEmailLoading(true);
+    try {
+      const result = await signIn('credentials', {
+        email: email.trim(),
+        password,
+        redirect: false,
+        callbackUrl: '/dashboard',
+      });
+      if (result?.error) {
+        setError('Invalid email or password');
+        setEmailLoading(false);
+        return;
+      }
+      window.location.href = '/dashboard';
+    } catch {
+      setError('Email sign-in failed. Add AUTH_EMAIL and AUTH_PASSWORD_HASH to .env.local.');
+      setEmailLoading(false);
+    }
   }
 
   return (
@@ -310,7 +329,7 @@ export default function LoginPage() {
               id="googleBtn"
               className="google-btn"
               onClick={handleGoogleLogin}
-              disabled={googleLoading}
+              disabled={googleLoading || emailLoading}
             >
               <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
                 <path d="M17.64 9.205c0-.639-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 01-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
@@ -349,8 +368,12 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') handleEmailLogin(); }}
               />
-              <button className="login-submit" onClick={handleEmailLogin}>
-                Sign in →
+              <button
+                className="login-submit"
+                onClick={handleEmailLogin}
+                disabled={emailLoading || googleLoading}
+              >
+                {emailLoading ? 'Signing in...' : 'Sign in →'}
               </button>
             </div>
 
