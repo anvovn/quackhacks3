@@ -557,8 +557,72 @@ function SuppliersSection({suppliers, onAdd, onUpdate}:{suppliers:Supplier[], on
   )
 }
 
-function OrderHistorySection({orders: initOrders, auditRows, pendingReorders}:{orders:PurchaseOrder[], auditRows:AuditRow[], pendingReorders:PendingReorder[]}) {
+interface SnowflakeRow { timestamp: string; sku_id: string; sku_name: string; days_left: number; reasoning: string; email_draft: string; status: string }
+
+function AgentInquiriesPanel() {
+  const [rows, setRows]       = useState<SnowflakeRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState("")
+  const [expanded, setExpanded] = useState<number | null>(null)
+
+  useEffect(()=>{
+    fetch("/api/snowflake-logs")
+      .then(r=>r.json())
+      .then(d=>{
+        if(d.error) setError(d.error)
+        setRows(d.rows ?? [])
+      })
+      .catch(()=>setError("Failed to reach backend"))
+      .finally(()=>setLoading(false))
+  },[])
+
+  function fmt(ts: string) {
+    try { return new Date(ts).toLocaleString("en-US",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}) }
+    catch { return ts }
+  }
+
+  if(loading) return <div style={{...S.mono,fontSize:11,color:"var(--muted)",textAlign:"center" as const,padding:"32px 0"}}>Loading from Snowflake…</div>
+  if(error)   return <div style={{...S.mono,fontSize:11,color:"var(--red)",textAlign:"center" as const,padding:"32px 0"}}>Error: {error}</div>
+  if(rows.length===0) return <div style={{...S.mono,fontSize:11,color:"var(--muted)",textAlign:"center" as const,padding:"32px 0"}}>No agent inquiries logged yet.</div>
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:0}}>
+      <RowHead cols="130px 1fr 70px 40px"><Th>Time</Th><Th>SKU</Th><Th>Days Left</Th><Th/></RowHead>
+      {rows.map((r,i)=>(
+        <div key={i}>
+          <div
+            onClick={()=>setExpanded(expanded===i?null:i)}
+            style={{display:"grid",gridTemplateColumns:"130px 1fr 70px 40px",gap:10,padding:"11px 18px",borderBottom:"1px solid var(--border)",alignItems:"center",cursor:"pointer",background:expanded===i?"var(--surface2)":"transparent"}}
+          >
+            <div style={{...S.mono,fontSize:10,color:"var(--muted)"}}>{fmt(r.timestamp)}</div>
+            <div>
+              <div style={{fontSize:12,color:"var(--text)"}}>{r.sku_name}</div>
+              <div style={{...S.mono,fontSize:9,color:"var(--muted)"}}>{r.sku_id}</div>
+            </div>
+            <div style={{...S.mono,fontSize:12,color:r.days_left<7?"var(--red)":r.days_left<14?"#f59e0b":"var(--accent)"}}>{r.days_left?.toFixed(1)}d</div>
+            <div style={{...S.mono,fontSize:11,color:"var(--muted)",textAlign:"center" as const}}>{expanded===i?"▲":"▼"}</div>
+          </div>
+          {expanded===i&&(
+            <div style={{background:"var(--surface2)",borderBottom:"1px solid var(--border)",padding:"14px 18px",display:"flex",flexDirection:"column",gap:12}}>
+              <div>
+                <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginBottom:4}}>GEMINI REASONING</div>
+                <div style={{fontSize:12,color:"var(--text)",lineHeight:1.7,whiteSpace:"pre-wrap"}}>{r.reasoning||"—"}</div>
+              </div>
+              <div>
+                <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginBottom:4}}>EMAIL DRAFT</div>
+                <div style={{fontSize:12,color:"var(--text)",lineHeight:1.7,whiteSpace:"pre-wrap",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:8,padding:"10px 12px"}}>{r.email_draft||"—"}</div>
+              </div>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function OrderHistorySection({orders: initOrders, auditRows, pendingReorders, onClear}:{orders:PurchaseOrder[], auditRows:AuditRow[], pendingReorders:PendingReorder[], onClear:()=>void}) {
   const [orders, setOrders] = useState(initOrders)
+  const [activeTab, setActiveTab] = useState<"orders"|"inquiries">("orders")
   useEffect(()=>setOrders(initOrders),[initOrders])
 
   const nextStatus:{[k in PurchaseOrder["status"]]:PurchaseOrder["status"]} = {
@@ -582,9 +646,34 @@ function OrderHistorySection({orders: initOrders, auditRows, pendingReorders}:{o
 
   const isEmpty = orders.length===0 && auditRows.length===0 && pendingReorders.length===0
 
+  const tabBtnStyle = (active: boolean) => ({
+    ...S.mono, fontSize:11, padding:"5px 14px", borderRadius:6, border:"1px solid var(--border)",
+    background: active ? "var(--accent)" : "transparent",
+    color: active ? "#000" : "var(--muted)", cursor:"pointer" as const,
+  })
+
   return (
     <>
-      <SectionHeader eyebrow="// agent orders" title="Agent Orders" action={<Btn onClick={exportCSV}>↓ Export CSV</Btn>}/>
+      <SectionHeader
+        eyebrow="// agent orders"
+        title={activeTab==="orders" ? "Agent Orders" : "Agent Inquiries"}
+        action={
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            {activeTab==="orders" && <>
+              <Btn onClick={exportCSV}>↓ Export CSV</Btn>
+              <Btn onClick={onClear} style={{color:"var(--muted)"}}>✕ Clear History</Btn>
+            </>}
+            <div style={{display:"flex",gap:4}}>
+              <button style={tabBtnStyle(activeTab==="orders")}    onClick={()=>setActiveTab("orders")}>Orders</button>
+              <button style={tabBtnStyle(activeTab==="inquiries")} onClick={()=>setActiveTab("inquiries")}>Inquiries</button>
+            </div>
+          </div>
+        }
+      />
+
+      {activeTab==="inquiries" ? (
+        <Panel><AgentInquiriesPanel/></Panel>
+      ) : <>
 
       {/* Purchase Orders */}
       <Panel>
@@ -647,6 +736,7 @@ function OrderHistorySection({orders: initOrders, auditRows, pendingReorders}:{o
           ))}
         </>}
       </Panel>
+      </>}
     </>
   )
 }
@@ -654,7 +744,6 @@ function OrderHistorySection({orders: initOrders, auditRows, pendingReorders}:{o
 function NotificationsSection() {
   const staticChannels = [
     {icon:"💬",bg:"#4A154B",name:"Slack",sub:"Connected · #chainagent-alerts",on:true,preview:"🚨 ChainAgent: Portland Aviator Pro 8.9 days stock. Lead 21 days. Reorder drafted 800 units. Approve →"},
-    {icon:"📧",bg:"#EA4335",name:"Email",sub:"founder@portlandoptics.com",on:true,preview:"[ChainAgent] Action Required — Portland Aviator Pro stockout in 8.9 days. Reorder awaiting approval."},
     {icon:"🔊",bg:"var(--accent-dim)",name:"Voice Alert",sub:"ElevenLabs · Rachel",on:true,preview:"\"Portland Aviator Pro has 8 days of stock. Lead time is 21 days. I've drafted a reorder for 800 units. Awaiting your approval.\""},
   ]
   const [states, setStates] = useState(staticChannels.map(c=>c.on))
@@ -1228,6 +1317,7 @@ export default function Dashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[showReply])
 
+
   // Countdown for email approval — auto-approves if setting is on
   useEffect(()=>{
     if(showEmail&&!emailResult){
@@ -1481,7 +1571,7 @@ export default function Dashboard() {
             )
           )}
           {section==="suppliers" && (shopifyConnected===null?null:shopifyConnected===false?<ShopifyGate onSettings={()=>setSection("settings")}/>:<SuppliersSection suppliers={suppliers} onAdd={s=>setSuppliers(prev=>[...prev,s])} onUpdate={s=>setSuppliers(prev=>prev.map(p=>p.id===s.id?s:p))}/>)}
-          {section==="history"   && <OrderHistorySection orders={orders} auditRows={auditRows} pendingReorders={pendingReorders}/>}
+          {section==="history"   && <OrderHistorySection orders={orders} auditRows={auditRows} pendingReorders={pendingReorders} onClear={()=>{setOrders([]);setAuditRows([])}}/>}
           {section==="notifications"&&<NotificationsSection/>}
           {section==="settings"    &&<SettingsSection agentSettings={agentSettings} onSaveSettings={setAgentSettings}/>}
         </main>
