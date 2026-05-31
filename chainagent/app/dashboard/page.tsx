@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { signOut, useSession } from "next-auth/react"
 import { useAgentStream } from "./hooks/useAgentStream"
-import type { TraceLine, PendingReorder } from "./hooks/useAgentStream"
+import type { TraceLine } from "./hooks/useAgentStream"
 
 // ── TYPES ──
 interface SKU {
@@ -34,6 +34,10 @@ interface PurchaseOrder {
   ref: string; sku: string; skuId: string; supplier: string; supplierEmail: string
   qty: number; orderDate: string; eta: string
   status: "sent" | "confirmed" | "in-transit" | "received"
+}
+interface StockInbound {
+  id: string; name: string; skuId: string; supplier: string
+  qty: number; variantId?: number; approvedAt: string
 }
 interface ShopifyOrder {
   id: string; customer: string; email: string; sku: string; skuCode: string
@@ -300,69 +304,84 @@ function InventorySection({brand, suppliers, skuSupplierMap, onAssign}:{
   )
 }
 
-function InboundsSection({reorders, onReceive}: {reorders: PendingReorder[], onReceive: (r: PendingReorder) => void}) {
+function InboundsSection({inbounds, onReceive}: {inbounds: StockInbound[], onReceive: (id: string, variantId?: number, qty?: number) => void}) {
   const [receiving, setReceiving] = useState<string | null>(null)
 
-  async function handleReceive(r: PendingReorder) {
-    setReceiving(r.id)
+  async function handleReceive(inbound: StockInbound) {
+    setReceiving(inbound.id)
     try {
-      await fetch("/api/reorder/receive", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ variant_id: r.variant_id, qty: r.qty }),
-      })
+      if(inbound.variantId && inbound.qty) {
+        await fetch("/api/reorder/receive", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ variant_id: inbound.variantId, qty: inbound.qty }),
+        })
+      }
     } finally {
       setReceiving(null)
-      onReceive(r)
+      onReceive(inbound.id, inbound.variantId, inbound.qty)
     }
   }
 
   return (
     <>
       <SectionHeader eyebrow="// stock inbounds" title="Stock Inbounds"/>
-      {reorders.length === 0 ? (
+      {inbounds.length === 0 ? (
         <Panel>
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"48px 0",gap:10}}>
-            <div style={{fontSize:28}}>📥</div>
-            <div style={{...S.display,fontSize:15,fontWeight:700}}>No inbounds yet</div>
+            <div style={{fontSize:28}}>📦</div>
+            <div style={{...S.display,fontSize:15,fontWeight:700}}>No pending inbounds</div>
             <div style={{...S.mono,fontSize:11,color:"var(--muted)",textAlign:"center" as const,maxWidth:320,lineHeight:1.7}}>
-              Inbound shipments will appear here when ChainAgent creates a reorder.<br/>
-              Approve a reorder in the Agent section to generate one.
+              When you approve an agent reorder, the shipment will appear here.<br/>
+              Confirm receipt once the stock arrives at your warehouse.
             </div>
           </div>
         </Panel>
       ) : (
-        <div style={{display:"flex",flexDirection:"column",gap:10}}>
-          {reorders.map(r => {
-            const daysElapsed = Math.floor((Date.now() - r.created_at) / (24 * 60 * 60 * 1000))
-            const isReceiving = receiving === r.id
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          {inbounds.map(inbound => {
+            const isReceiving = receiving === inbound.id
             return (
-              <Panel key={r.id}>
-                <div style={{padding:"16px 18px",display:"flex",flexDirection:"column",gap:12}}>
+              <div key={inbound.id} style={{background:"var(--surface)",border:"1px solid var(--border)",borderLeft:"4px solid var(--amber)",borderRadius:12,overflow:"hidden"}}>
+                <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:14}}>
+                  {/* Header */}
                   <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between"}}>
                     <div>
-                      <div style={{fontSize:14,fontWeight:600,color:"var(--text)"}}>{r.name}</div>
-                      <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginTop:2}}>{r.supplier||"—"} · {(r.qty??0).toLocaleString()} units ordered</div>
+                      <div style={{fontSize:13,fontWeight:600,color:"var(--text)"}}>{inbound.name}</div>
+                      <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginTop:3}}>
+                        {inbound.skuId} · Approved {inbound.approvedAt}
+                      </div>
                     </div>
-                    <StatusPill label="In Transit" type="transit"/>
+                    <span style={{...S.mono,fontSize:9,padding:"3px 8px",borderRadius:100,background:"rgba(251,191,36,0.12)",color:"var(--amber)",border:"1px solid rgba(251,191,36,0.25)",flexShrink:0}}>AWAITING RECEIPT</span>
                   </div>
-                  <div>
-                    <div style={{display:"flex",justifyContent:"space-between",...S.mono,fontSize:10,color:"var(--muted2)",marginBottom:5}}>
-                      <span>Ordered today</span>
-                      <span style={{color:"var(--blue)"}}>{daysElapsed === 0 ? "Awaiting shipment" : `${daysElapsed} day${daysElapsed !== 1 ? "s" : ""} in transit`}</span>
+
+                  {/* Details row */}
+                  <div style={{display:"flex",gap:24}}>
+                    <div>
+                      <div style={{...S.mono,fontSize:9,color:"var(--muted)",marginBottom:2}}>SUPPLIER</div>
+                      <div style={{fontSize:12,color:"var(--text)"}}>{inbound.supplier}</div>
                     </div>
-                    <div style={{height:4,background:"var(--surface3)",borderRadius:2}}>
-                      <div style={{height:"100%",width:`${Math.min(100, daysElapsed * 5)}%`,background:"var(--blue)",borderRadius:2,transition:"width 1s"}}/>
+                    <div>
+                      <div style={{...S.mono,fontSize:9,color:"var(--muted)",marginBottom:2}}>UNITS ORDERED</div>
+                      <div style={{...S.mono,fontSize:14,fontWeight:700,color:"var(--text)"}}>{(inbound.qty??0).toLocaleString()}</div>
                     </div>
                   </div>
-                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                    <Btn variant="primary" style={{fontSize:11,padding:"7px 16px"}} onClick={() => handleReceive(r)}>
-                      {isReceiving ? "Receiving…" : "✓ Mark as Received"}
-                    </Btn>
-                    <div style={{...S.mono,fontSize:10,color:"var(--muted)"}}>Clicking will add {(r.qty??0).toLocaleString()} units to Shopify inventory</div>
+
+                  {/* Action */}
+                  <div style={{borderTop:"1px solid var(--border)",paddingTop:12,display:"flex",alignItems:"center",gap:12}}>
+                    <button
+                      onClick={()=>handleReceive(inbound)}
+                      disabled={isReceiving}
+                      style={{...S.mono,fontSize:11,fontWeight:600,padding:"9px 20px",borderRadius:8,border:"none",cursor:isReceiving?"not-allowed":"pointer",background:isReceiving?"var(--surface3)":"var(--amber)",color:isReceiving?"var(--muted)":"#000",transition:"background 0.2s",flexShrink:0}}
+                    >
+                      {isReceiving ? "Confirming…" : "✓ Confirm Stock Received"}
+                    </button>
+                    <div style={{...S.mono,fontSize:10,color:"var(--muted)",lineHeight:1.5}}>
+                      Adds {(inbound.qty??0).toLocaleString()} units to Shopify inventory and removes this entry.
+                    </div>
                   </div>
                 </div>
-              </Panel>
+              </div>
             )
           })}
         </div>
@@ -562,7 +581,7 @@ const PO_STATUS_LABEL: Record<PurchaseOrder["status"],string> = {
   "sent":"Sent","confirmed":"Confirmed","in-transit":"In Transit","received":"Received"
 }
 
-function OrderHistorySection({orders, auditRows, pendingReorders, onUpdateOrder}:{orders:PurchaseOrder[], auditRows:AuditRow[], pendingReorders:PendingReorder[], onUpdateOrder:(ref:string, status:PurchaseOrder["status"])=>void}) {
+function OrderHistorySection({orders, auditRows, inbounds, onUpdateOrder}:{orders:PurchaseOrder[], auditRows:AuditRow[], inbounds:StockInbound[], onUpdateOrder:(ref:string, status:PurchaseOrder["status"])=>void}) {
   const pillType = (s:PurchaseOrder["status"]):React.ComponentProps<typeof StatusPill>["type"] =>
     s==="received"?"live":s==="in-transit"?"transit":s==="confirmed"?"pending":"draft"
 
@@ -575,7 +594,7 @@ function OrderHistorySection({orders, auditRows, pendingReorders, onUpdateOrder}
     URL.revokeObjectURL(url)
   }
 
-  const isEmpty = orders.length===0 && auditRows.length===0 && pendingReorders.length===0
+  const isEmpty = orders.length===0 && auditRows.length===0 && inbounds.length===0
 
   return (
     <>
@@ -612,16 +631,17 @@ function OrderHistorySection({orders, auditRows, pendingReorders, onUpdateOrder}
         </>}
       </Panel>
 
-      {/* Stock Inbounds (in transit) */}
-      {pendingReorders.length>0&&(
+      {/* Stock Inbounds awaiting receipt */}
+      {inbounds.length>0&&(
         <Panel>
-          <PanelHeader title="📥 Stock Inbounds (In Transit)"/>
-          <RowHead cols="1fr 1fr 80px"><Th>SKU</Th><Th>Supplier</Th><Th>Qty</Th></RowHead>
-          {pendingReorders.map((r,i)=>(
-            <div key={r.id} style={{display:"grid",gridTemplateColumns:"1fr 1fr 80px",gap:10,padding:"12px 18px",borderBottom:i<pendingReorders.length-1?"1px solid var(--border)":"none",alignItems:"center"}}>
+          <PanelHeader title="📦 Awaiting Receipt"/>
+          <RowHead cols="1fr 1fr 80px 80px"><Th>SKU</Th><Th>Supplier</Th><Th>Qty</Th><Th>Approved</Th></RowHead>
+          {inbounds.map((r,i)=>(
+            <div key={r.id} style={{display:"grid",gridTemplateColumns:"1fr 1fr 80px 80px",gap:10,padding:"12px 18px",borderBottom:i<inbounds.length-1?"1px solid var(--border)":"none",alignItems:"center",borderLeft:"3px solid var(--amber)"}}>
               <div style={{fontSize:12,color:"var(--text)"}}>{r.name}</div>
               <div style={{...S.mono,fontSize:11,color:"var(--muted)"}}>{r.supplier}</div>
               <div style={{...S.mono,fontSize:12}}>{(r.qty??0).toLocaleString()}</div>
+              <div style={{...S.mono,fontSize:10,color:"var(--muted)"}}>{r.approvedAt}</div>
             </div>
           ))}
         </Panel>
@@ -1039,6 +1059,7 @@ export default function Dashboard() {
   const [suppliers,        setSuppliers]        = useState<Supplier[]>([])
   const [skuSupplierMap,   setSkuSupplierMap]   = useState<Record<string,string>>({})
   const [orders,           setOrders]           = useState<PurchaseOrder[]>([])
+  const [inbounds,         setInbounds]         = useState<StockInbound[]>([])
 
   const [shopifyOrders,    setShopifyOrders]    = useState<ShopifyOrder[]>([])
   const [shopifyConnected, setShopifyConnected] = useState<boolean|null>(null)
@@ -1077,6 +1098,8 @@ export default function Dashboard() {
       if(rawOrders) setOrders(JSON.parse(rawOrders))
       const rawAudit = localStorage.getItem(`chainagent:${userKey}:auditRows`)
       if(rawAudit) setAuditRows(JSON.parse(rawAudit))
+      const rawInbounds = localStorage.getItem(`chainagent:${userKey}:inbounds`)
+      if(rawInbounds) setInbounds(JSON.parse(rawInbounds))
       const rawSched = localStorage.getItem(`chainagent:${userKey}:scheduleTarget`)
       if(rawSched){
         const target = parseInt(rawSched)
@@ -1090,12 +1113,13 @@ export default function Dashboard() {
   useEffect(()=>{ try { localStorage.setItem(`chainagent:${userKey}:agentSettings`, JSON.stringify(agentSettings)) } catch {} },[userKey, agentSettings])
   useEffect(()=>{ try { localStorage.setItem(`chainagent:${userKey}:orders`, JSON.stringify(orders)) } catch {} },[userKey, orders])
   useEffect(()=>{ try { localStorage.setItem(`chainagent:${userKey}:auditRows`, JSON.stringify(auditRows)) } catch {} },[userKey, auditRows])
+  useEffect(()=>{ try { localStorage.setItem(`chainagent:${userKey}:inbounds`, JSON.stringify(inbounds)) } catch {} },[userKey, inbounds])
 
   const cdInt = useRef<ReturnType<typeof setInterval>|null>(null)
 
   // ── real backend hook ──
   const stream = useAgentStream()
-  const { agentRunning, showEmail, emailResult, showReply, backendOnline, pendingReorders, stagedReorder, removeReorder } = stream
+  const { agentRunning, showEmail, emailResult, showReply, backendOnline, stagedReorder } = stream
 
   // ── check Shopify connection status ──
   useEffect(()=>{
@@ -1155,7 +1179,7 @@ export default function Dashboard() {
       label: "brand: Portland Optics",
       days: critSku.days,
       stock: totalStock.toLocaleString(),
-      incoming: pendingReorders.length > 0 ? pendingReorders.reduce((s, r) => s + r.qty, 0).toLocaleString() : "—",
+      incoming: inbounds.length > 0 ? inbounds.reduce((s, r) => s + (r.qty??0), 0).toLocaleString() : "—",
       crit: critSku.name.toUpperCase(),
       agentTitle: `chainagent-runtime · ${mappedSkus.length} SKUs monitored`,
       supplier: suppliers[0]?.name || "—",
@@ -1241,8 +1265,7 @@ export default function Dashboard() {
     if(cdInt.current)clearInterval(cdInt.current)
     stream.approve()
     const critSku  = brand?.skus.find(s=>s.risk==="Critical")||brand?.skus[0]
-    const reorder  = stream.pendingReorders[0]
-    const qty      = reorder?.qty ?? agentReorderQty
+    const qty      = agentReorderQty
     const supplier = agentSupplierName || brand?.supplier || "Supplier"
     const now      = new Date()
     const timeStr  = now.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})
@@ -1251,12 +1274,11 @@ export default function Dashboard() {
     setAuditRows(prev=>[{time:`Today ${timeStr}`,action:`Reorder approved · ${critSku?.name||""} · ${qty} units → ${supplier}`,sku:critSku?.id||"",label:"Sent"},...prev])
 
     if(critSku){
-      setOrders(prev=>{
-        const ref=`PO-${now.getFullYear()}-${String(prev.length+1).padStart(3,"0")}`
-        return [{ref,sku:critSku.name,skuId:critSku.id,supplier,supplierEmail:agentSupplierEmail,qty,orderDate:dateStr,eta:dateStr,status:"sent" as const},...prev]
-      })
+      const ref=`PO-${now.getFullYear()}-${String(Date.now()).slice(-4)}`
+      setOrders(prev=>[{ref,sku:critSku.name,skuId:critSku.id,supplier,supplierEmail:agentSupplierEmail,qty,orderDate:dateStr,eta:dateStr,status:"sent" as const},...prev])
+      setInbounds(prev=>[{id:`INB-${Date.now()}`,name:critSku.name,skuId:critSku.id,supplier,qty,approvedAt:dateStr},...prev])
     }
-  },[stream, brand, agentReorderQty, agentSupplierEmail, agentSupplierName])
+  },[stream, brand, agentReorderQty, agentSupplierEmail, agentSupplierName, setInbounds])
 
   const handleCancel = useCallback(()=>{
     if(cdInt.current)clearInterval(cdInt.current)
@@ -1289,7 +1311,7 @@ export default function Dashboard() {
     {id:"overview",    name:"Overview",       icon:"◈", label:"Monitor"},
     {id:"agent",       name:"Run Agent",      icon:"⚡", label:"Monitor"},
     {id:"inventory",   name:"Inventory",      icon:"◫", label:"Monitor"},
-    {id:"inbounds",    name:"Stock Inbounds", icon:"📥",label:"Monitor",badge:pendingReorders.length>0?String(pendingReorders.length):undefined,badgeColor:"amber"},
+    {id:"inbounds",    name:"Stock Inbounds", icon:"📥",label:"Monitor",badge:inbounds.length>0?String(inbounds.length):undefined,badgeColor:"amber"},
     {id:"orders",      name:"Orders",         icon:"📦",label:"Monitor"},
     {id:"suppliers",   name:"Suppliers",      icon:"◉", label:"Manage"},
     {id:"history",     name:"Agent Orders",icon:"≡",label:"Manage",badge:auditRows.length>0?String(auditRows.length):undefined,badgeColor:"green"},
@@ -1453,13 +1475,13 @@ export default function Dashboard() {
                   ):<AgentSection brand={brand} supplierEmail={agentSupplierEmail} supplierName={agentSupplierName} reorderQty={agentReorderQty} agentRunning={agentRunning} trace={stream.trace} showEmail={showEmail} emailResult={emailResult} showReply={showReply} cdVal={fmt(cdSecs)} onRun={handleRunAgent} onReset={handleReset} onApprove={handleApprove} onCancel={handleCancel} emailContent={stream.emailContent}/>
                 )}
                 {section==="inventory" &&<InventorySection brand={brand} suppliers={suppliers} skuSupplierMap={skuSupplierMap} onAssign={(id,suppId)=>setSkuSupplierMap(m=>({...m,[id]:suppId}))}/>}
-                {section==="inbounds"  &&<InboundsSection reorders={pendingReorders} onReceive={r=>{removeReorder(r.id);handleResync()}}/>}
+                {section==="inbounds"  &&<InboundsSection inbounds={inbounds} onReceive={(id)=>{ setInbounds(prev=>prev.filter(i=>i.id!==id)); handleResync() }}/>}
                 {section==="orders"    &&<OrdersSection orders={shopifyOrders}/>}
               </>
             )
           )}
           {section==="suppliers" && (shopifyConnected===null?null:shopifyConnected===false?<ShopifyGate onSettings={()=>setSection("settings")}/>:<SuppliersSection suppliers={suppliers} onAdd={s=>setSuppliers(prev=>[...prev,s])} onUpdate={s=>setSuppliers(prev=>prev.map(p=>p.id===s.id?s:p))}/>)}
-          {section==="history"   && <OrderHistorySection orders={orders} auditRows={auditRows} pendingReorders={pendingReorders} onUpdateOrder={(ref,status)=>setOrders(prev=>prev.map(p=>p.ref===ref?{...p,status}:p))}/>}
+          {section==="history"   && <OrderHistorySection orders={orders} auditRows={auditRows} inbounds={inbounds} onUpdateOrder={(ref,status)=>setOrders(prev=>prev.map(p=>p.ref===ref?{...p,status}:p))}/>}
           {section==="notifications"&&<NotificationsSection/>}
           {section==="settings"    &&<SettingsSection agentSettings={agentSettings} onSaveSettings={setAgentSettings}/>}
         </main>
