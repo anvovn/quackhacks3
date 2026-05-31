@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 from agent.elevenlabs import trigger_voice
 from agent.snowflake_log import log_snowflake
+from agent.twilio_sms import trigger_sms
 
 load_dotenv()
 
