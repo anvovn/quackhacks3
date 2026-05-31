@@ -2,8 +2,7 @@ import asyncio
 import json
 import threading
 
-from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi import FastAPI, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -41,11 +40,10 @@ def is_running() -> bool:
     return agent_thread is not None and agent_thread.is_alive()
 
 
-def _agent_target() -> None:
-    """Thread target: runs the real agent and wraps it with lifecycle events."""
+def _agent_target(supplier_name: str = "", supplier_email: str = "") -> None:
     emit("STATUS", "Agent starting...")
     try:
-        run_agent(emit)
+        run_agent(emit, supplier_name=supplier_name, supplier_email=supplier_email)
     except Exception as exc:
         emit("ERROR", str(exc))
     finally:
@@ -57,18 +55,22 @@ def _agent_target() -> None:
 # ---------------------------------------------------------------------------
 
 @app.post("/run-agent")
-async def start_agent():
+async def start_agent(body: dict = Body(default={})):
     """Start the agent. Rejects if one is already running."""
     global agent_thread
     if is_running():
         return {"status": "already_running"}
 
-    # Reset all state for a fresh run
     trace_queue.clear()
     approve_event.clear()
     cancel_event.clear()
 
-    agent_thread = threading.Thread(target=_agent_target, daemon=True)
+    supplier = body.get("supplier", {})
+    agent_thread = threading.Thread(
+        target=_agent_target,
+        args=(supplier.get("name", ""), supplier.get("email", "")),
+        daemon=True,
+    )
     agent_thread.start()
     return {"status": "started"}
 

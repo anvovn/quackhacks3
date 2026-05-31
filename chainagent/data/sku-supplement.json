@@ -2,19 +2,16 @@
   "DHOD5-EC999002": {
     "velocity_per_day": 47,
     "lead_time_days": 21,
-    "supplier_name": "Guangzhou Optics Co.",
     "reorder_qty": 500
   },
   "DHOD5-EC999009": {
     "velocity_per_day": 48,
     "lead_time_days": 21,
-    "supplier_name": "Guangzhou Optics Co.",
     "reorder_qty": 800
   },
   "DHOD5-EC999003": {
     "velocity_per_day": 31,
     "lead_time_days": 21,
-    "supplier_name": "Guangzhou Optics Co.",
     "reorder_qty": 600
   }
 }

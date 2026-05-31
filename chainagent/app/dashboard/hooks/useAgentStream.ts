@@ -32,7 +32,7 @@ export interface UseAgentStreamResult {
   emailResult: string
   showReply: boolean
   pendingReorders: PendingReorder[]
-  runAgent: () => Promise<void>
+  runAgent: (supplier?: { name: string; email: string }) => Promise<void>
   approve: () => Promise<void>
   cancel: () => Promise<void>
   reset: () => void
@@ -130,10 +130,9 @@ export function useAgentStream(): UseAgentStreamResult {
   }, [])
 
   // ── public actions ──────────────────────────────────────────────────────
-  const runAgent = useCallback(async () => {
+  const runAgent = useCallback(async (supplier?: { name: string; email: string }) => {
     if (agentRunning) return
 
-    // Reset UI state
     setTrace([])
     setShowEmail(false)
     setEmailContent("")
@@ -141,11 +140,14 @@ export function useAgentStream(): UseAgentStreamResult {
     setShowReply(false)
     setAgentRunning(true)
 
-    // Open the SSE stream first so we don't miss early events
     openStream()
 
     try {
-      const res = await fetch("/api/run-agent", { method: "POST" })
+      const res = await fetch("/api/run-agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ supplier: supplier ?? {} }),
+      })
       const data: { status: string } = await res.json()
       if (data.status === "already_running") {
         // stream is already open, that's fine

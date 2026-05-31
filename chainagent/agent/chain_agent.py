@@ -183,8 +183,9 @@ def run_agent(emit, supplier_name: str = "", supplier_email: str = ""):
             for line in reasoning.split("."):
                 if line.strip(): emit("THINK", line.strip())
 
-            # Step 2: Gemini drafts email from real data, no hardcoded placeholders
+            # Step 2: Gemini drafts email using the supplier passed from the UI, no hardcoded placeholders
             emit("ACT", "Drafting supplier email...")
+            effective_supplier = supplier_name or "your supplier"
             email = strip_markdown(generate_text(
                 client,
                 f"""Write a short, professional plain-text reorder email using only the facts below.

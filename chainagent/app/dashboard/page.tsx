@@ -8,6 +8,7 @@ import type { TraceLine, PendingReorder } from "./hooks/useAgentStream"
 interface SKU {
   name: string; id: string; stock: string; inc: string
   vel: string; days: string; pct: number; risk: string; rc: string
+  leadTime: string; price: string
   velSource?: "shopify_orders" | "supplement"
 }
 interface Brand {
@@ -17,7 +18,7 @@ interface Brand {
 }
 interface RawSKU {
   id?: string; name: string; stock: number; velocity_per_day: number
-  lead_time_days: number; supplier_name: string; reorder_qty: number
+  lead_time_days: number; reorder_qty: number; price?: string
   velocity_source?: "shopify_orders" | "supplement"
 }
 interface AuditRow { time: string; action: string; sku: string; label: string }
@@ -287,20 +288,23 @@ function OverviewSection({brand,onRunAgent,onViewAllReorders}:{brand:Brand,onRun
   )
 }
 
-function InventorySection({brand}:{brand:Brand}) {
+function InventorySection({brand, suppliers, skuSupplierMap, onAssign}:{
+  brand:Brand, suppliers:Supplier[], skuSupplierMap:Record<string,string>, onAssign:(skuId:string,suppId:string)=>void
+}) {
   const [search, setSearch] = useState("")
   const filtered = brand.skus.filter(s=>s.name.toLowerCase().includes(search.toLowerCase())||s.id.toLowerCase().includes(search.toLowerCase()))
   return (
     <>
-      <SectionHeader eyebrow="// inventory" title="Inventory" hook="← /api/inventory"
+      <SectionHeader eyebrow="// inventory" title="Inventory" hook="← Shopify"
         action={<input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search SKUs..." style={{...S.mono,fontSize:11,background:"var(--surface2)",border:"1px solid var(--border2)",borderRadius:6,padding:"6px 11px",color:"var(--text)",outline:"none",width:160}}/>}/>
       <Panel>
-        <RowHead cols="2fr 70px 85px 75px 120px 80px 80px 90px"><Th>Product</Th><Th>Stock</Th><Th>Incoming</Th><Th>Velocity</Th><Th>Runway</Th><Th>Lead Time</Th><Th>COGS</Th><Th>Risk</Th></RowHead>
+        <RowHead cols="2fr 70px 75px 120px 90px 80px 160px 90px">
+          <Th>Product</Th><Th>Stock</Th><Th>Velocity</Th><Th>Runway</Th><Th>Lead Time</Th><Th>Price</Th><Th>Supplier</Th><Th>Risk</Th>
+        </RowHead>
         {filtered.map(sku=>(
-          <div key={sku.id} style={{display:"grid",gridTemplateColumns:"2fr 70px 85px 75px 120px 80px 80px 90px",gap:10,padding:"12px 18px",borderBottom:"1px solid var(--border)",alignItems:"center",background:sku.risk==="Critical"?"rgba(239,68,68,0.03)":"transparent"}}>
+          <div key={sku.id} style={{display:"grid",gridTemplateColumns:"2fr 70px 75px 120px 90px 80px 160px 90px",gap:10,padding:"12px 18px",borderBottom:"1px solid var(--border)",alignItems:"center",background:sku.risk==="Critical"?"rgba(239,68,68,0.03)":"transparent"}}>
             <div><div style={{fontSize:13,fontWeight:500,color:"var(--text)"}}>{sku.name}</div><div style={{...S.mono,fontSize:9,color:"var(--muted)"}}>{sku.id}</div></div>
             <div style={{...S.mono,fontSize:12}}>{sku.stock}</div>
-            <div style={{...S.mono,fontSize:12,color:sku.inc.startsWith("+")?"var(--accent)":"var(--muted2)"}}>{sku.inc}</div>
             <div>
               <div style={{...S.mono,fontSize:12}}>{sku.vel}</div>
               <div style={{...S.mono,fontSize:8,marginTop:1,color:sku.velSource==="shopify_orders"?"var(--accent)":"var(--amber)"}}>
@@ -308,11 +312,24 @@ function InventorySection({brand}:{brand:Brand}) {
               </div>
             </div>
             <RunwayBar days={sku.days} pct={sku.pct} risk={sku.risk}/>
-            <div style={{...S.mono,fontSize:12}}>21 days</div>
-            <div style={{...S.mono,fontSize:12}}>$12.50</div>
+            <div style={{...S.mono,fontSize:12}}>{sku.leadTime}</div>
+            <div style={{...S.mono,fontSize:12}}>{sku.price}</div>
+            <select
+              value={skuSupplierMap[sku.id]||""}
+              onChange={e=>onAssign(sku.id,e.target.value)}
+              style={{...S.mono,fontSize:10,background:"var(--surface2)",border:`1px solid ${skuSupplierMap[sku.id]?"var(--accent-mid)":"var(--border2)"}`,borderRadius:6,padding:"4px 8px",color:skuSupplierMap[sku.id]?"var(--text)":"var(--muted)",outline:"none",width:"100%",cursor:"pointer"}}
+            >
+              <option value="">— assign supplier —</option>
+              {suppliers.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
             <RiskPill risk={sku.risk}/>
           </div>
         ))}
+        {suppliers.length===0&&(
+          <div style={{...S.mono,fontSize:10,color:"var(--amber)",padding:"10px 18px",borderTop:"1px solid var(--border)"}}>
+            ⚠ Add suppliers in the Suppliers tab to assign them to SKUs
+          </div>
+        )}
       </Panel>
     </>
   )
@@ -971,7 +988,8 @@ export default function Dashboard() {
   const [cdSecs, setCdSecs]       = useState(7200)
   const [liveSkus, setLiveSkus]   = useState<RawSKU[] | "error" | null>(null)
   const [auditRows, setAuditRows] = useState<AuditRow[]>([])
-  const [suppliers,        setSuppliers]        = useState<Supplier[]>([]) // populated by SuppliersSection internally
+  const [suppliers,        setSuppliers]        = useState<Supplier[]>([])
+  const [skuSupplierMap,   setSkuSupplierMap]   = useState<Record<string,string>>({}) // skuId → supplierId
   const [orders,           setOrders]           = useState<PurchaseOrder[]>([])
   const [inbounds,         setInbounds]         = useState<Inbound[]>([])
   const [shopifyOrders,    setShopifyOrders]    = useState<ShopifyOrder[]>([])
@@ -1028,6 +1046,8 @@ export default function Dashboard() {
         pct,
         risk,
         rc: risk==="Critical"?"risk-critical":risk==="Watch"?"risk-watch":"risk-ok",
+        leadTime: `${s.lead_time_days} days`,
+        price: s.price ? `$${parseFloat(s.price).toFixed(2)}` : "—",
       }
     })
     const critSku = mappedSkus.reduce((a: SKU, b: SKU) => parseFloat(a.days) < parseFloat(b.days) ? a : b)
@@ -1040,23 +1060,19 @@ export default function Dashboard() {
       incoming: pendingReorders.length > 0 ? pendingReorders.reduce((s, r) => s + r.qty, 0).toLocaleString() : "—",
       crit: critSku.name.toUpperCase(),
       agentTitle: `chainagent-runtime · ${mappedSkus.length} SKUs monitored`,
-      supplier: liveSkus[0]?.supplier_name ?? "—",
-      email: "wei@guangzhou-optics.cn",
+      supplier: suppliers[0]?.name || "—",
+      email: suppliers[0]?.email || "",
       skus: mappedSkus,
     }
   })()
 
-  // Resolve supplier contact for the agent email (matches critical SKU's vendor in user's supplier list)
-  const agentSupplier = suppliers.find(s =>
-    s.name.toLowerCase() === (brand?.supplier || "").toLowerCase()
-  ) ?? suppliers[0] ?? null
+  // Resolve supplier contact for the agent email via skuSupplierMap
+  const critMapped = brand?.skus.find(s=>s.risk==="Critical") ?? brand?.skus[0]
+  const agentSupplier = critMapped ? (suppliers.find(s => s.id === skuSupplierMap[critMapped.id]) ?? null) : null
   const agentSupplierEmail = agentSupplier?.email || ""
-  const agentSupplierName  = agentSupplier?.name  || brand?.supplier || ""
+  const agentSupplierName  = agentSupplier?.name  || ""
   const agentCritSku  = Array.isArray(liveSkus) ? (
-    liveSkus.find(s => {
-      const mapped = brand?.skus.find(b=>b.risk==="Critical")
-      return s.id===mapped?.id || s.name===mapped?.name
-    }) ?? liveSkus[0]
+    liveSkus.find(s => s.id===critMapped?.id || s.name===critMapped?.name) ?? liveSkus[0]
   ) : null
   const agentReorderQty = agentCritSku?.reorder_qty ?? 500
 
@@ -1104,8 +1120,8 @@ export default function Dashboard() {
 
   // ── delegate agent actions to real hook ──
   const handleRunAgent = useCallback(()=>{
-    stream.runAgent()
-  },[stream])
+    stream.runAgent(agentSupplier ? { name: agentSupplierName, email: agentSupplierEmail } : undefined)
+  },[stream, agentSupplier, agentSupplierName, agentSupplierEmail])
 
   const handleApprove = useCallback(()=>{
     if(cdInt.current)clearInterval(cdInt.current)
@@ -1114,7 +1130,7 @@ export default function Dashboard() {
     const rawSku  = Array.isArray(liveSkus)?liveSkus.find(s=>s.id===critSku?.id||s.name===critSku?.name):null
     const leadDays = rawSku?.lead_time_days ?? 21
     const qty      = rawSku?.reorder_qty ?? 500
-    const supplier = rawSku?.supplier_name || agentSupplierName || brand?.supplier || "Supplier"
+    const supplier = agentSupplierName || brand?.supplier || "Supplier"
     const now      = new Date()
     const timeStr  = now.toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"})
     const dateStr  = now.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})
@@ -1308,19 +1324,29 @@ export default function Dashboard() {
             ) : (
               <>
                 {section==="overview"  &&<OverviewSection brand={brand} onRunAgent={()=>{setSection("agent");setTimeout(handleRunAgent,200)}} onViewAllReorders={()=>setSection("logs")}/>}
-                {section==="agent"     &&(suppliers.length===0?(
-                  <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:320,gap:12}}>
-                    <div style={{fontSize:28}}>◉</div>
-                    <div style={{...S.display,fontSize:16,fontWeight:700}}>Add a supplier first</div>
-                    <div style={{...S.mono,fontSize:11,color:"var(--muted)",textAlign:"center" as const,maxWidth:320,lineHeight:1.7}}>
-                      The agent needs a supplier contact to send the reorder email.<br/>
-                      Add one in the Suppliers tab, then come back.
+                {section==="agent"     &&(
+                  suppliers.length===0?(
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:320,gap:12}}>
+                      <div style={{fontSize:28}}>◉</div>
+                      <div style={{...S.display,fontSize:16,fontWeight:700}}>Add a supplier first</div>
+                      <div style={{...S.mono,fontSize:11,color:"var(--muted)",textAlign:"center" as const,maxWidth:320,lineHeight:1.7}}>
+                        Add a supplier with their contact info in the Suppliers tab, then assign them to the critical SKU in Inventory.
+                      </div>
+                      <Btn variant="primary" onClick={()=>setSection("suppliers")}>Go to Suppliers →</Btn>
                     </div>
-                    <Btn variant="primary" onClick={()=>setSection("suppliers")}>Go to Suppliers →</Btn>
-                  </div>
-                ):<AgentSection brand={brand} supplierEmail={agentSupplierEmail} supplierName={agentSupplierName} reorderQty={agentReorderQty} agentRunning={agentRunning} trace={stream.trace} showEmail={showEmail} emailResult={emailResult} showReply={showReply} cdVal={fmt(cdSecs)} onRun={handleRunAgent} onReset={handleReset} onApprove={handleApprove} onCancel={handleCancel} emailContent={stream.emailContent}/>)}
-                {section==="inventory" &&<InventorySection brand={brand}/>}
-                {section==="inbounds"  &&<InboundsSection reorders={pendingReorders} onReceive={r => { removeReorder(r.id); handleResync() }}/>}
+                  ):!agentSupplier?(
+                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:320,gap:12}}>
+                      <div style={{fontSize:28}}>🔗</div>
+                      <div style={{...S.display,fontSize:16,fontWeight:700}}>Assign a supplier to {critMapped?.name||"the critical SKU"}</div>
+                      <div style={{...S.mono,fontSize:11,color:"var(--muted)",textAlign:"center" as const,maxWidth:340,lineHeight:1.7}}>
+                        Open Inventory, find the SKU, and use the supplier dropdown to link it. The agent will use that supplier's contact for the email.
+                      </div>
+                      <Btn variant="primary" onClick={()=>setSection("inventory")}>Go to Inventory →</Btn>
+                    </div>
+                  ):<AgentSection brand={brand} supplierEmail={agentSupplierEmail} supplierName={agentSupplierName} reorderQty={agentReorderQty} agentRunning={agentRunning} trace={stream.trace} showEmail={showEmail} emailResult={emailResult} showReply={showReply} cdVal={fmt(cdSecs)} onRun={handleRunAgent} onReset={handleReset} onApprove={handleApprove} onCancel={handleCancel} emailContent={stream.emailContent}/>
+                )}
+                {section==="inventory" &&<InventorySection brand={brand} suppliers={suppliers} skuSupplierMap={skuSupplierMap} onAssign={(id,suppId)=>setSkuSupplierMap(m=>({...m,[id]:suppId}))}/>}
+                {section==="inbounds"  &&<InboundsSection inbounds={inbounds}/>}
                 {section==="orders"    &&<OrdersSection orders={shopifyOrders}/>}
               </>
             )
