@@ -19,6 +19,7 @@ DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 SHOPIFY_CFG_PATH = DATA_DIR / "shopify-config.json"
 
 VELOCITY_DAYS = 30
+REORDER_THRESHOLD_DAYS = 21  # only analyze SKUs with less than this many days of stock
 
 
 def strip_markdown(text):
@@ -183,6 +184,10 @@ def run_agent(emit, supplier_name: str = "", supplier_email: str = ""):
         days = stock / vel if vel > 0 else float("inf")
         emit("WATCH", f"{sku['name']} · {vel}/day (shopify_orders) · {stock} units · days_left: {days:.1f}")
 
+        if days >= REORDER_THRESHOLD_DAYS:
+            emit("WATCH", f"{sku['name']} · {days:.0f} days stock — healthy, no action needed")
+            continue
+
         # Step 1: Gemini reasons about risk and recommends reorder qty + urgency
         emit("THINK", "Invoking Gemini · reasoning...")
         raw_reasoning = generate_text(
@@ -191,12 +196,12 @@ def run_agent(emit, supplier_name: str = "", supplier_email: str = ""):
 
 SKU: {sku['name']} (ID: {sku['id']})
 Current stock: {stock} units
-Sales velocity: {vel} units/day (calculated from last {VELOCITY_DAYS} days of Shopify orders)
+Sales velocity: {vel} units/day (from last {VELOCITY_DAYS} days of real Shopify orders)
 Days of stock remaining: {days:.1f}
+Reorder threshold: {REORDER_THRESHOLD_DAYS} days
 
-Based only on these real numbers, should we reorder? If yes, how many units and how urgent?
-End your response with exactly: REORDER_QTY: <number>
-If no reorder needed, end with: REORDER_QTY: 0"""
+Stock is below the reorder threshold. Calculate how many units to order to restore {REORDER_THRESHOLD_DAYS * 2} days of supply.
+Be specific about urgency. End your response with exactly: REORDER_QTY: <number>"""
         )
         qty_match = re.search(r"REORDER_QTY:\s*(\d+)", raw_reasoning)
         reorder_qty = int(qty_match.group(1)) if qty_match else 0
