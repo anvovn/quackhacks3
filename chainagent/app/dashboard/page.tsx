@@ -680,6 +680,45 @@ function NotificationsSection() {
 function SettingsSection() {
   const { data: session } = useSession()
   const [settings,setSettings] = useState({autoApprove:false,voice:true,snowflake:true,schedule:true})
+
+  // ── Shopify connection state ──
+  const [shopifyConnected, setShopifyConnected] = useState<boolean|null>(null)
+  const [shopifyStore,     setShopifyStore]     = useState("")
+  const [showShopify,      setShowShopify]       = useState(false)
+  const [shopifyDomain,    setShopifyDomain]     = useState("")
+  const [shopifyToken,     setShopifyToken]      = useState("")
+  const [shopifyPhase,     setShopifyPhase]      = useState<"idle"|"saving"|"ok"|"err">("idle")
+  const [shopifyErr,       setShopifyErr]        = useState("")
+  const [shopifyName,      setShopifyName]       = useState("")
+
+  useEffect(()=>{
+    fetch("/api/settings")
+      .then(r=>r.json())
+      .then(d=>{setShopifyConnected(d.connected); setShopifyStore(d.store||"")})
+      .catch(()=>setShopifyConnected(false))
+  },[])
+
+  async function connectShopify() {
+    setShopifyPhase("saving"); setShopifyErr("")
+    try {
+      const res = await fetch("/api/settings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({store:shopifyDomain,token:shopifyToken})})
+      const data = await res.json()
+      if(!res.ok){setShopifyPhase("err"); setShopifyErr(data.error||"Unknown error"); return}
+      setShopifyPhase("ok")
+      setShopifyConnected(true)
+      setShopifyStore(shopifyDomain.replace(/^https?:\/\//,"").replace(/\/$/,""))
+      setShopifyName(data.shopName||"")
+      setTimeout(()=>{setShowShopify(false); setShopifyPhase("idle"); setShopifyToken("")},900)
+    } catch {
+      setShopifyPhase("err"); setShopifyErr("Network error — is the dev server running?")
+    }
+  }
+
+  async function disconnectShopify() {
+    await fetch("/api/settings",{method:"DELETE"})
+    setShopifyConnected(false); setShopifyStore(""); setShopifyName("")
+  }
+
   return (
     <>
       <SectionHeader eyebrow="// settings" title="Settings"/>
@@ -690,7 +729,7 @@ function SettingsSection() {
             <div style={{fontSize:13,color:"var(--text)"}}>{session?.user?.name ?? "Signed in"}</div>
             <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginTop:4}}>{session?.user?.email ?? "—"}</div>
           </div>
-          <Btn variant="ghost" onClick={() => signOut({ callbackUrl: "/login" })}>Sign out</Btn>
+          <Btn variant="ghost" onClick={()=>signOut({callbackUrl:"/login"})}>Sign out</Btn>
         </div>
       </Panel>
       <Panel>
@@ -698,9 +737,9 @@ function SettingsSection() {
         <div style={{padding:16,display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
           {[
             {key:"autoApprove",label:"Auto-approve reorders",sub:"Send without manual approval"},
-            {key:"voice",label:"Voice alerts",sub:"ElevenLabs audio"},
-            {key:"snowflake",label:"Snowflake logging",sub:"Log all actions"},
-            {key:"schedule",label:"Auto-schedule agent",sub:"Run every X hours"},
+            {key:"voice",      label:"Voice alerts",         sub:"ElevenLabs audio"},
+            {key:"snowflake",  label:"Snowflake logging",    sub:"Log all actions"},
+            {key:"schedule",   label:"Auto-schedule agent",  sub:"Run every X hours"},
           ].map(({key,label,sub})=>(
             <div key={key} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 13px",background:"var(--surface2)",borderRadius:10,border:"1px solid var(--border)"}}>
               <div><div style={{fontSize:13,color:"var(--text)"}}>{label}</div><div style={{...S.mono,fontSize:10,color:"var(--muted)",marginTop:1}}>{sub}</div></div>
@@ -724,12 +763,57 @@ function SettingsSection() {
       <Panel>
         <PanelHeader title={<>🔌 API Connections <BeHook>← .env.local</BeHook></>}/>
         <div style={{padding:16,display:"flex",flexDirection:"column",gap:8}}>
+
+          {/* ── Shopify — live connection ── */}
+          <div style={{background:"var(--surface2)",borderRadius:10,border:`1px solid ${shopifyConnected?"rgba(0,229,160,0.2)":"var(--border)"}`,overflow:"hidden"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 13px"}}>
+              <div>
+                <div style={{fontSize:13,color:"var(--text)"}}>Shopify</div>
+                <div style={{...S.mono,fontSize:10,marginTop:1,color:shopifyConnected?"var(--accent)":"var(--muted)"}}>
+                  {shopifyConnected===null?"◎ Checking…":shopifyConnected?`● Connected · ${shopifyName||shopifyStore}`:"◌ Not connected"}
+                </div>
+              </div>
+              <div style={{display:"flex",gap:7}}>
+                {shopifyConnected&&<Btn variant="danger" style={{fontSize:10,padding:"5px 12px"}} onClick={disconnectShopify}>Disconnect</Btn>}
+                <Btn variant={shopifyConnected?"ghost":"primary"} style={{fontSize:10,padding:"5px 12px"}} onClick={()=>{setShowShopify(v=>!v);setShopifyPhase("idle");setShopifyErr("")}}>
+                  {shopifyConnected?"Reconnect":"Connect"}
+                </Btn>
+              </div>
+            </div>
+
+            {showShopify&&(
+              <div style={{borderTop:"1px solid var(--border)",padding:"14px 13px",display:"flex",flexDirection:"column",gap:10}}>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
+                  <div>
+                    <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginBottom:4}}>Store domain</div>
+                    <input value={shopifyDomain} onChange={e=>setShopifyDomain(e.target.value)} placeholder="your-store.myshopify.com"
+                      style={{...S.mono,fontSize:11,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:6,padding:"7px 10px",color:"var(--text)",outline:"none",width:"100%"}}/>
+                  </div>
+                  <div>
+                    <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginBottom:4}}>Admin API access token</div>
+                    <input value={shopifyToken} onChange={e=>setShopifyToken(e.target.value)} placeholder="shpat_xxxxxxxxxxxxx" type="password"
+                      style={{...S.mono,fontSize:11,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:6,padding:"7px 10px",color:"var(--text)",outline:"none",width:"100%"}}/>
+                  </div>
+                </div>
+                {shopifyErr&&<div style={{...S.mono,fontSize:10,color:"var(--red)",background:"var(--red-dim)",borderRadius:6,padding:"7px 10px"}}>{shopifyErr}</div>}
+                <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                  <Btn variant={shopifyPhase==="ok"?"ghost":"primary"} style={{fontSize:11,padding:"7px 16px"}} onClick={connectShopify}>
+                    {shopifyPhase==="saving"?"Testing…":shopifyPhase==="ok"?"✓ Connected":shopifyPhase==="err"?"Retry":"Test & Save"}
+                  </Btn>
+                  <div style={{...S.mono,fontSize:10,color:"var(--muted)"}}>
+                    Needs <code style={{background:"var(--surface3)",padding:"1px 5px",borderRadius:3}}>read_products</code> + <code style={{background:"var(--surface3)",padding:"1px 5px",borderRadius:3}}>read_inventory</code> scopes
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ── Other static integrations ── */}
           {[
-            {name:"Shopify",sub:"● Connected · dev store",subColor:"var(--accent)",action:"Reconnect"},
-            {name:"Claude API",sub:"● Connected",subColor:"var(--accent)",action:"Update Key"},
-            {name:"ElevenLabs",sub:"● Connected",subColor:"var(--accent)",action:"Update Key"},
-            {name:"Snowflake",sub:"◎ Pending setup",subColor:"var(--amber)",action:"Connect",primary:true},
-            {name:"Gemini Vision",sub:"● Connected · PDF parsing",subColor:"var(--accent)",action:"Update Key"},
+            {name:"Claude API",  sub:"● Connected",                subColor:"var(--accent)", action:"Update Key"},
+            {name:"ElevenLabs",  sub:"● Connected",                subColor:"var(--accent)", action:"Update Key"},
+            {name:"Snowflake",   sub:"◎ Pending setup",            subColor:"var(--amber)",  action:"Connect", primary:true},
+            {name:"Gemini Vision",sub:"● Connected · PDF parsing", subColor:"var(--accent)", action:"Update Key"},
           ].map(({name,sub,subColor,action,primary})=>(
             <div key={name} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 13px",background:"var(--surface2)",borderRadius:10,border:"1px solid var(--border)"}}>
               <div><div style={{fontSize:13,color:"var(--text)"}}>{name}</div><div style={{...S.mono,fontSize:10,color:subColor,marginTop:1}}>{sub}</div></div>
