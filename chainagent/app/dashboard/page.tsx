@@ -8,6 +8,7 @@ import type { TraceLine } from "./hooks/useAgentStream"
 interface SKU {
   name: string; id: string; stock: string; inc: string
   vel: string; days: string; pct: number; risk: string; rc: string
+  velSource?: "shopify_orders" | "supplement"
 }
 interface Brand {
   name: string; label: string; days: string; stock: string
@@ -17,6 +18,7 @@ interface Brand {
 interface RawSKU {
   id?: string; name: string; stock: number; velocity_per_day: number
   lead_time_days: number; supplier_name: string; reorder_qty: number
+  velocity_source?: "shopify_orders" | "supplement"
 }
 interface AuditRow { time: string; action: string; sku: string; label: string }
 interface Supplier {
@@ -243,7 +245,7 @@ function OverviewSection({brand,onRunAgent,onViewAllReorders}:{brand:Brand,onRun
       </Panel>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
         <Panel>
-          <PanelHeader title="📈 Velocity Trend (7d)"/>
+          <PanelHeader title="📈 Sales Velocity (30d avg)"/>
           <div style={{padding:16}}>
             {brand.skus.map(sku=>{
               const vel=parseInt(sku.vel)
@@ -294,7 +296,12 @@ function InventorySection({brand}:{brand:Brand}) {
             <div><div style={{fontSize:13,fontWeight:500,color:"var(--text)"}}>{sku.name}</div><div style={{...S.mono,fontSize:9,color:"var(--muted)"}}>{sku.id}</div></div>
             <div style={{...S.mono,fontSize:12}}>{sku.stock}</div>
             <div style={{...S.mono,fontSize:12,color:sku.inc.startsWith("+")?"var(--accent)":"var(--muted2)"}}>{sku.inc}</div>
-            <div style={{...S.mono,fontSize:12}}>{sku.vel}</div>
+            <div>
+              <div style={{...S.mono,fontSize:12}}>{sku.vel}</div>
+              <div style={{...S.mono,fontSize:8,marginTop:1,color:sku.velSource==="shopify_orders"?"var(--accent)":"var(--amber)"}}>
+                {sku.velSource==="shopify_orders"?"● live 30d":"● estimated"}
+              </div>
+            </div>
             <RunwayBar days={sku.days} pct={sku.pct} risk={sku.risk}/>
             <div style={{...S.mono,fontSize:12}}>21 days</div>
             <div style={{...S.mono,fontSize:12}}>$12.50</div>
@@ -925,6 +932,7 @@ export default function Dashboard() {
         stock: s.stock.toLocaleString(),
         inc: "—",
         vel: `${s.velocity_per_day}/day`,
+        velSource: s.velocity_source,
         days: days.toFixed(1),
         pct,
         risk,
