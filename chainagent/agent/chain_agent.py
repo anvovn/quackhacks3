@@ -111,42 +111,36 @@ def _get_primary_location(store: str, token: str) -> int:
     return locations[0]["id"]
 
 
-def create_shopify_transfer(sku: dict, emit) -> None:
+def adjust_shopify_inventory(variant_id: int, qty: int) -> dict:
     cfg = _shopify_config()
     if not cfg:
-        emit("STATUS", "No Shopify config — skipping transfer")
-        return
-
-    variant_id = sku.get("variant_id")
-    if not variant_id:
-        emit("STATUS", f"No variant_id for {sku['name']} — skipping transfer")
-        return
+        return {"error": "No Shopify config"}
 
     store, token = cfg["store"], cfg["token"]
-    try:
-        location_id = _get_primary_location(store, token)
-        payload = json.dumps({
-            "transfer": {
-                "reference_number": f"REORDER-{sku['id']}",
-                "to_location_id": location_id,
-                "line_items": [{"variant_id": variant_id, "quantity": sku["reorder_qty"]}],
-            }
-        }).encode()
+    headers = {"X-Shopify-Access-Token": token}
 
-        url = f"https://{store}/admin/api/2024-01/transfers.json"
-        req = urllib.request.Request(
-            url,
-            data=payload,
-            headers={"X-Shopify-Access-Token": token, "Content-Type": "application/json"},
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            result = json.loads(resp.read())
+    req = urllib.request.Request(
+        f"https://{store}/admin/api/2024-01/variants/{variant_id}.json",
+        headers=headers,
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        inventory_item_id = json.loads(resp.read())["variant"]["inventory_item_id"]
 
-        transfer_id = result["transfer"]["id"]
-        emit("ACT", f"Shopify transfer #{transfer_id} created — {sku['reorder_qty']} units of {sku['name']} pending receipt")
-    except Exception as exc:
-        emit("ERROR", f"Failed to create Shopify transfer for {sku['name']}: {exc}")
+    location_id = _get_primary_location(store, token)
+
+    payload = json.dumps({
+        "inventory_item_id": inventory_item_id,
+        "location_id": location_id,
+        "available_adjustment": qty,
+    }).encode()
+    req = urllib.request.Request(
+        f"https://{store}/admin/api/2024-01/inventory_levels/adjust.json",
+        data=payload,
+        headers={**headers, "Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        return json.loads(resp.read())
 
 
 def get_gemini_client():
@@ -179,20 +173,30 @@ def run_agent(emit):
 
             # Step 1: Gemini reasons about risk
             emit("THINK", "Invoking Gemini · reasoning...")
-            reasoning = strip_markdown(generate_text(
+            raw_reasoning = generate_text(
                 client,
-                f"You are a supply chain agent. Explain in plain English, no markdown formatting.\n\nSKU {sku['name']}: {days:.1f} days stock left, lead time {sku['lead_time_days']} days. Velocity: {sku['velocity_per_day']}/day. Should I reorder? How many units?"
-            ))
+                f"You are a supply chain agent. Explain in plain English, no markdown formatting.\n\nSKU {sku['name']}: {days:.1f} days stock left, lead time {sku['lead_time_days']} days. Velocity: {sku['velocity_per_day']}/day. Should we reorder? Explain your reasoning, then on the last line write exactly: REORDER_QTY: <number>"
+            )
+            qty_match = re.search(r"REORDER_QTY:\s*(\d+)", raw_reasoning)
+            reorder_qty = int(qty_match.group(1)) if qty_match else sku["reorder_qty"]
+            reasoning = strip_markdown(re.sub(r"REORDER_QTY:\s*\d+", "", raw_reasoning).strip())
             for line in reasoning.split("."):
                 if line.strip(): emit("THINK", line.strip())
 
-            # Step 2: Gemini drafts email
+            # Step 2: Gemini drafts email using its own recommended qty
             emit("ACT", "Drafting supplier email...")
             email = strip_markdown(generate_text(
                 client,
-                f"Draft urgent reorder email for {sku['name']} to {sku['supplier_name']}. Qty: {sku['reorder_qty']} units. Keep it professional and brief. Use plain text only, no markdown."
+                f"Draft an urgent reorder email from Portland Optics to {sku['supplier_name']} for {reorder_qty} units of {sku['name']}. Current stock: {sku['stock']} units covering {days:.1f} days. Lead time: {sku['lead_time_days']} days. Sign off as 'Portland Optics Operations Team'. Use plain text only, no markdown, no placeholder text like [Your Name] or [Contact Information]."
             ))
             emit("EMAIL", email)
-            create_shopify_transfer(sku, emit)
+            emit("REORDER", json.dumps({
+                "id": sku["id"],
+                "variant_id": sku.get("variant_id"),
+                "name": sku["name"],
+                "qty": reorder_qty,
+                "supplier": sku["supplier_name"],
+                "lead_time_days": sku["lead_time_days"],
+            }))
             trigger_voice(sku, days)
             log_snowflake(sku, reasoning, email, days)

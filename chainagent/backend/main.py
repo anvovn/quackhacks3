@@ -4,10 +4,11 @@ import threading
 from pathlib import Path
 
 from fastapi import FastAPI
+from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-from agent.chain_agent import run_agent
+from agent.chain_agent import run_agent, adjust_shopify_inventory
 
 DATA_PATH = Path(__file__).resolve().parents[1] / "data" / "skus.json"
 
@@ -121,6 +122,20 @@ async def stream():
                 await asyncio.sleep(0.1)
 
     return StreamingResponse(generator(), media_type="text/event-stream")
+
+
+class ReceiveBody(BaseModel):
+    variant_id: int
+    qty: int
+
+@app.post("/reorder/receive")
+def receive_reorder(body: ReceiveBody):
+    """Adjust Shopify inventory when a reorder is marked as received."""
+    try:
+        result = adjust_shopify_inventory(body.variant_id, body.qty)
+        return {"status": "received", "inventory_level": result}
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
 
 
 @app.get("/skus")

@@ -6,6 +6,16 @@ export interface TraceLine {
   time: string
 }
 
+export interface PendingReorder {
+  id: string
+  variant_id: number
+  name: string
+  qty: number
+  supplier: string
+  lead_time_days: number
+  created_at: number
+}
+
 export interface AgentStatus {
   online: boolean
   agentRunning: boolean
@@ -16,15 +26,17 @@ export interface UseAgentStreamResult {
   trace: TraceLine[]
   agentRunning: boolean
   awaitingApproval: boolean
-  backendOnline: boolean | null   // null = still checking
+  backendOnline: boolean | null
   emailContent: string
   showEmail: boolean
   emailResult: string
   showReply: boolean
+  pendingReorders: PendingReorder[]
   runAgent: () => Promise<void>
   approve: () => Promise<void>
   cancel: () => Promise<void>
   reset: () => void
+  removeReorder: (id: string) => void
 }
 
 export function useAgentStream(): UseAgentStreamResult {
@@ -36,6 +48,7 @@ export function useAgentStream(): UseAgentStreamResult {
   const [showEmail, setShowEmail]       = useState(false)
   const [emailResult, setEmailResult]   = useState("")
   const [showReply, setShowReply]       = useState(false)
+  const [pendingReorders, setPendingReorders] = useState<PendingReorder[]>([])
 
   const esRef        = useRef<EventSource | null>(null)
   const statusTimer  = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -89,6 +102,13 @@ export function useAgentStream(): UseAgentStreamResult {
         if (data.tag === "EMAIL") {
           setEmailContent(data.msg)
           setShowEmail(true)
+        }
+
+        if (data.tag === "REORDER") {
+          try {
+            const reorder = JSON.parse(data.msg)
+            setPendingReorders(prev => [...prev, { ...reorder, created_at: Date.now() }])
+          } catch {}
         }
 
         if (data.tag === "STATUS" && data.msg === "Agent finished") {
@@ -159,6 +179,10 @@ export function useAgentStream(): UseAgentStreamResult {
     }
   }, [])
 
+  const removeReorder = useCallback((id: string) => {
+    setPendingReorders(prev => prev.filter(r => r.id !== id))
+  }, [])
+
   const reset = useCallback(() => {
     closeStream()
     setAgentRunning(false)
@@ -188,9 +212,11 @@ export function useAgentStream(): UseAgentStreamResult {
     showEmail,
     emailResult,
     showReply,
+    pendingReorders,
     runAgent,
     approve,
     cancel,
     reset,
+    removeReorder,
   }
 }

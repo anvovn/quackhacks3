@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { signOut, useSession } from "next-auth/react"
 import { useAgentStream } from "./hooks/useAgentStream"
-import type { TraceLine } from "./hooks/useAgentStream"
+import type { TraceLine, PendingReorder } from "./hooks/useAgentStream"
 
 // ── TYPES ──
 interface SKU {
@@ -313,20 +313,79 @@ function InventorySection({brand}:{brand:Brand}) {
   )
 }
 
-function InboundsSection() {
+function InboundsSection({reorders, onReceive}: {reorders: PendingReorder[], onReceive: (r: PendingReorder) => void}) {
+  const [receiving, setReceiving] = useState<string | null>(null)
+
+  async function handleReceive(r: PendingReorder) {
+    setReceiving(r.id)
+    try {
+      await fetch("/api/reorder/receive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ variant_id: r.variant_id, qty: r.qty }),
+      })
+    } finally {
+      setReceiving(null)
+      onReceive(r)
+    }
+  }
+
   return (
     <>
       <SectionHeader eyebrow="// stock inbounds" title="Stock Inbounds"/>
-      <Panel>
-        <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"48px 0",gap:10}}>
-          <div style={{fontSize:28}}>📥</div>
-          <div style={{...S.display,fontSize:15,fontWeight:700}}>No inbounds yet</div>
-          <div style={{...S.mono,fontSize:11,color:"var(--muted)",textAlign:"center" as const,maxWidth:320,lineHeight:1.7}}>
-            Inbound shipments will appear here when ChainAgent creates a reorder.<br/>
-            Approve a reorder in the Agent section to generate one.
+      {reorders.length === 0 ? (
+        <Panel>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"48px 0",gap:10}}>
+            <div style={{fontSize:28}}>📥</div>
+            <div style={{...S.display,fontSize:15,fontWeight:700}}>No inbounds yet</div>
+            <div style={{...S.mono,fontSize:11,color:"var(--muted)",textAlign:"center" as const,maxWidth:320,lineHeight:1.7}}>
+              Inbound shipments will appear here when ChainAgent creates a reorder.<br/>
+              Approve a reorder in the Agent section to generate one.
+            </div>
           </div>
+        </Panel>
+      ) : (
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {reorders.map(r => {
+            const arrival = new Date(r.created_at + r.lead_time_days * 24 * 60 * 60 * 1000)
+            const daysElapsed = Math.floor((Date.now() - r.created_at) / (24 * 60 * 60 * 1000))
+            const daysRemaining = Math.max(0, r.lead_time_days - daysElapsed)
+            const pct = Math.min(100, Math.round((daysElapsed / r.lead_time_days) * 100))
+            const isReceiving = receiving === r.id
+            return (
+              <Panel key={r.id}>
+                <div style={{padding:"16px 18px",display:"flex",flexDirection:"column",gap:12}}>
+                  <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between"}}>
+                    <div>
+                      <div style={{fontSize:14,fontWeight:600,color:"var(--text)"}}>{r.name}</div>
+                      <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginTop:2}}>{r.supplier} · {r.qty.toLocaleString()} units ordered</div>
+                    </div>
+                    <StatusPill label="In Transit" type="transit"/>
+                  </div>
+                  <div>
+                    <div style={{display:"flex",justifyContent:"space-between",...S.mono,fontSize:10,color:"var(--muted2)",marginBottom:5}}>
+                      <span>Ordered today</span>
+                      <span style={{color:"var(--blue)"}}>ETA {arrival.toLocaleDateString("en-US",{month:"short",day:"numeric"})}</span>
+                    </div>
+                    <div style={{height:4,background:"var(--surface3)",borderRadius:2}}>
+                      <div style={{height:"100%",width:`${pct}%`,background:"var(--blue)",borderRadius:2,transition:"width 1s"}}/>
+                    </div>
+                    <div style={{...S.mono,fontSize:9,color:"var(--muted)",marginTop:4}}>
+                      {daysRemaining === 0 ? "Arriving today" : `${daysRemaining} day${daysRemaining !== 1 ? "s" : ""} remaining · ${r.lead_time_days} day lead time`}
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                    <Btn variant="primary" style={{fontSize:11,padding:"7px 16px"}} onClick={() => handleReceive(r)}>
+                      {isReceiving ? "Receiving…" : "✓ Mark as Received"}
+                    </Btn>
+                    <div style={{...S.mono,fontSize:10,color:"var(--muted)"}}>Clicking will add {r.qty.toLocaleString()} units to Shopify inventory</div>
+                  </div>
+                </div>
+              </Panel>
+            )
+          })}
         </div>
-      </Panel>
+      )}
     </>
   )
 }
@@ -786,7 +845,13 @@ function AgentSection({brand,supplierEmail,supplierName,agentRunning,trace,showE
   onRun:()=>void,onReset:()=>void,onApprove:()=>void,onCancel:()=>void
 }) {
   const traceRef = useRef<HTMLDivElement>(null)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editedEmail, setEditedEmail] = useState("")
+
   useEffect(()=>{if(traceRef.current)traceRef.current.scrollTop=traceRef.current.scrollHeight},[trace])
+  useEffect(()=>{ setIsEditing(false); setEditedEmail(emailContent) },[emailContent])
+
+  const displayEmail = editedEmail || emailContent
   const tagStyle = (tag:string) => TAG_COLORS[tag]||TAG_COLORS.WATCH
   return (
     <>
@@ -832,14 +897,25 @@ function AgentSection({brand,supplierEmail,supplierName,agentRunning,trace,showE
             <div style={{display:"flex",gap:10,...S.mono,fontSize:12,padding:"4px 0"}}><span style={{color:"var(--muted)",minWidth:55}}>Subject:</span><span>Urgent Reorder — {brand.skus[0]?.name||""} · {brand.skus[0]?.vel||""}</span></div>
           </div>
           <div style={{padding:"12px 18px",borderBottom:"1px solid var(--border)"}}>
-            <div style={{...S.mono,fontSize:11,lineHeight:1.9,color:"var(--text)",background:"var(--surface2)",borderRadius:8,padding:"12px 14px",whiteSpace:"pre-wrap"}}>
-              {emailContent || `Hi,\n\nWe need to place an urgent reorder for 800 units of ${brand.skus[1]?.name||""} (SKU: ${brand.skus[1]?.id||""}).\n\nCurrent stock covers approximately 9 days. Lead time is 21 days. Please confirm availability and earliest ship date.\n\nTotal order value: $10,000 USD (800 × $12.50)\n\nBest,\n${brand.name} Operations Team\n\n— Sent by ChainAgent`}
-            </div>
+            {isEditing ? (
+              <textarea
+                value={editedEmail}
+                onChange={e => setEditedEmail(e.target.value)}
+                style={{...S.mono,fontSize:11,lineHeight:1.9,color:"var(--text)",background:"var(--surface2)",borderRadius:8,padding:"12px 14px",width:"100%",minHeight:220,border:"1px solid var(--accent-mid)",outline:"none",resize:"vertical"}}
+              />
+            ) : (
+              <div style={{...S.mono,fontSize:11,lineHeight:1.9,color:"var(--text)",background:"var(--surface2)",borderRadius:8,padding:"12px 14px",whiteSpace:"pre-wrap"}}>
+                {displayEmail || "Waiting for agent to draft email…"}
+              </div>
+            )}
           </div>
           {!emailResult?(
             <div style={{padding:"12px 18px",display:"flex",alignItems:"center",gap:9,flexWrap:"wrap" as const}}>
               <Btn variant="primary" style={{padding:"9px 20px"}} onClick={onApprove}>✓ Approve & Send</Btn>
-              <Btn style={{padding:"9px 18px"}}>✏ Edit</Btn>
+              {isEditing
+                ? <Btn variant="primary" style={{padding:"9px 18px",background:"var(--surface3)",color:"var(--text)"}} onClick={()=>setIsEditing(false)}>✓ Done</Btn>
+                : <Btn style={{padding:"9px 18px"}} onClick={()=>setIsEditing(true)}>✏ Edit</Btn>
+              }
               <button onClick={onCancel} style={{background:"none",color:"var(--muted)",border:"none",...S.mono,fontSize:12,cursor:"pointer",padding:9}}>Cancel</button>
               <div style={{marginLeft:"auto",...S.mono,fontSize:11,color:"var(--amber)"}}>⏱ auto-sending in {cdVal}</div>
             </div>
@@ -889,7 +965,7 @@ export default function Dashboard() {
 
   // ── real backend hook ──
   const stream = useAgentStream()
-  const { agentRunning, showEmail, emailResult, showReply, backendOnline } = stream
+  const { agentRunning, showEmail, emailResult, showReply, backendOnline, pendingReorders, removeReorder } = stream
 
   // ── check Shopify connection status ──
   useEffect(()=>{
@@ -946,7 +1022,7 @@ export default function Dashboard() {
       label: "brand: Portland Optics",
       days: critSku.days,
       stock: totalStock.toLocaleString(),
-      incoming: "—",
+      incoming: pendingReorders.length > 0 ? pendingReorders.reduce((s, r) => s + r.qty, 0).toLocaleString() : "—",
       crit: critSku.name.toUpperCase(),
       agentTitle: `chainagent-runtime · ${mappedSkus.length} SKUs monitored`,
       supplier: liveSkus[0]?.supplier_name ?? "—",
@@ -1059,7 +1135,7 @@ export default function Dashboard() {
     {id:"overview",icon:"◈",label:"Monitor"},
     {id:"agent",   icon:"⚡",label:"Monitor",badge:"1 alert",badgeColor:"red"},
     {id:"inventory",icon:"◫",label:"Monitor"},
-    {id:"inbounds",icon:"📥",label:"Monitor",badge:"1",badgeColor:"amber"},
+    {id:"inbounds",icon:"📥",label:"Monitor",badge:pendingReorders.length>0?String(pendingReorders.length):undefined,badgeColor:"amber"},
     {id:"orders",  icon:"📦",label:"Monitor",badge:"2 issues",badgeColor:"red"},
     {id:"suppliers",icon:"◉",label:"Manage"},
     {id:"invoices",icon:"💳",label:"Manage"},
@@ -1204,7 +1280,7 @@ export default function Dashboard() {
                 {section==="overview"  &&<OverviewSection brand={brand} onRunAgent={()=>{setSection("agent");setTimeout(handleRunAgent,200)}} onViewAllReorders={()=>setSection("logs")}/>}
                 {section==="agent"     &&<AgentSection brand={brand} supplierEmail={agentSupplierEmail} supplierName={agentSupplierName} agentRunning={agentRunning} trace={stream.trace} showEmail={showEmail} emailResult={emailResult} showReply={showReply} cdVal={fmt(cdSecs)} onRun={handleRunAgent} onReset={handleReset} onApprove={handleApprove} onCancel={handleCancel} emailContent={stream.emailContent}/>}
                 {section==="inventory" &&<InventorySection brand={brand}/>}
-                {section==="inbounds"  &&<InboundsSection/>}
+                {section==="inbounds"  &&<InboundsSection reorders={pendingReorders} onReceive={r => { removeReorder(r.id); handleResync() }}/>}
                 {section==="orders"    &&<OrdersSection orders={shopifyOrders}/>}
               </>
             )
