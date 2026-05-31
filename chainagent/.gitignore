@@ -34,8 +34,11 @@ yarn-error.log*
 .env
 .env.local
 
-# shopify credentials (never commit)
+# sensitive credentials (never commit)
 data/shopify-config.json
+data/api-keys.json
+data/email-config.json
+data/sms-config.json
 # vercel
 .vercel
 

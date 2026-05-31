@@ -8,22 +8,49 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-from agent.chain_agent import run_agent, adjust_shopify_inventory, load_skus
+from agent.chain_agent import run_agent, adjust_shopify_inventory, load_skus, simulate_one_day
 
-DATA_DIR   = Path(__file__).resolve().parents[1] / "data"
-SMS_CONFIG = DATA_DIR / "sms-config.json"
+DATA_DIR     = Path(__file__).resolve().parents[1] / "data"
+EMAIL_CONFIG = DATA_DIR / "email-config.json"
+API_KEYS_FILE = DATA_DIR / "api-keys.json"
 
+# Keys exposed to the UI — maps JSON field name → env var fallback
+_KEY_DEFS = {
+    "gemini_api_key":     "GEMINI_API_KEY",
+    "gemini_model":       "GEMINI_MODEL",
+    "elevenlabs_api_key": "ELEVENLABS_API_KEY",
+    "elevenlabs_voice_id":"ELEVENLABS_VOICE_ID",
+    "snowflake_user":     "SNOWFLAKE_USER",
+    "snowflake_password": "SNOWFLAKE_PASSWORD",
+    "snowflake_account":  "SNOWFLAKE_ACCOUNT",
+    "sendgrid_api_key":   "SENDGRID_API_KEY",
+    "email_from":         "EMAIL_FROM",
+    "twilio_account_sid": "TWILIO_ACCOUNT_SID",
+    "twilio_auth_token":  "TWILIO_AUTH_TOKEN",
+    "twilio_from":        "TWILIO_FROM",
+}
 
-def _read_sms_config() -> dict:
+def _read_api_keys() -> dict:
     try:
-        return json.loads(SMS_CONFIG.read_text())
+        return json.loads(API_KEYS_FILE.read_text())
     except Exception:
-        return {"enabled": False, "phone": ""}
+        return {}
 
-
-def _write_sms_config(cfg: dict) -> None:
+def _write_api_keys(keys: dict) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    SMS_CONFIG.write_text(json.dumps(cfg, indent=2))
+    API_KEYS_FILE.write_text(json.dumps(keys, indent=2))
+
+
+def _read_email_config() -> dict:
+    try:
+        return json.loads(EMAIL_CONFIG.read_text())
+    except Exception:
+        return {"enabled": False, "email": ""}
+
+
+def _write_email_config(cfg: dict) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    EMAIL_CONFIG.write_text(json.dumps(cfg, indent=2))
 
 # ---------------------------------------------------------------------------
 # App
@@ -83,6 +110,7 @@ async def start_agent(body: dict = Body(default={})):
     cancel_event.clear()
 
     supplier = body.get("supplier", {})
+
     agent_thread = threading.Thread(
         target=_agent_target,
         args=(supplier.get("name", ""), supplier.get("email", "")),
@@ -160,18 +188,100 @@ async def get_skus():
     return load_skus()
 
 
-class SmsConfigBody(BaseModel):
+class EmailConfigBody(BaseModel):
     enabled: bool
-    phone: str
+    email: str
 
 
-@app.get("/sms-config")
-def get_sms_config():
-    return _read_sms_config()
+@app.get("/email-config")
+def get_email_config():
+    return _read_email_config()
 
 
-@app.post("/sms-config")
-def save_sms_config(body: SmsConfigBody):
-    cfg = {"enabled": body.enabled, "phone": body.phone.strip()}
-    _write_sms_config(cfg)
+@app.post("/email-config")
+def save_email_config(body: EmailConfigBody):
+    cfg = {"enabled": body.enabled, "email": body.email.strip()}
+    _write_email_config(cfg)
     return {"status": "saved", **cfg}
+
+
+@app.post("/email-test")
+def send_test_email():
+    from agent.twilio_email import SENDGRID_API_KEY, EMAIL_FROM, _send
+    cfg = _read_email_config()
+    to_email = cfg.get("email", "").strip()
+    if not to_email:
+        return {"status": "error", "detail": "No email address configured"}
+    if not SENDGRID_API_KEY or not EMAIL_FROM:
+        return {"status": "error", "detail": "SendGrid credentials not set in .env (SENDGRID_API_KEY, EMAIL_FROM)"}
+    import urllib.error
+    try:
+        _send(
+            to_email,
+            subject="[ChainAgent] Test notification",
+            body="ChainAgent: Test notification — your email alerts are working correctly.",
+        )
+        return {"status": "sent"}
+    except urllib.error.HTTPError as e:
+        body = e.read().decode(errors="replace")
+        try:
+            detail = json.loads(body).get("errors", [{}])[0].get("message", body)
+        except Exception:
+            detail = body
+        return {"status": "error", "detail": f"SendGrid {e.code}: {detail}"}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+
+@app.get("/snowflake-logs")
+def get_snowflake_logs():
+    """Return agent action history from Snowflake."""
+    from agent.snowflake_log import query_snowflake
+    try:
+        rows = query_snowflake(limit=200)
+        # Snowflake timestamps are datetime objects — convert to ISO strings
+        for row in rows:
+            if hasattr(row.get("timestamp"), "isoformat"):
+                row["timestamp"] = row["timestamp"].isoformat()
+        return {"rows": rows}
+    except Exception as exc:
+        return {"rows": [], "error": str(exc)}
+
+
+@app.post("/simulate-day")
+def simulate_day():
+    """Deduct one day of velocity from all SKUs in Shopify."""
+    try:
+        changes = simulate_one_day()
+        return {"status": "ok", "changes": changes}
+    except Exception as exc:
+        return {"status": "error", "message": str(exc)}
+
+
+import os as _os
+
+@app.get("/api-keys")
+def get_api_keys_status():
+    """Return which keys are configured — booleans only, never raw values."""
+    saved = _read_api_keys()
+    result = {}
+    for field, env_var in _KEY_DEFS.items():
+        val = saved.get(field) or _os.getenv(env_var, "")
+        result[field] = bool(val)
+    return result
+
+
+@app.post("/api-keys")
+def save_api_keys(body: dict = Body(default={})):
+    """Persist provided keys to data/api-keys.json. Empty string clears a key."""
+    saved = _read_api_keys()
+    for field in _KEY_DEFS:
+        if field not in body:
+            continue
+        val = body[field].strip() if isinstance(body[field], str) else ""
+        if val:
+            saved[field] = val
+        elif field in saved:
+            del saved[field]
+    _write_api_keys(saved)
+    return {"status": "saved"}

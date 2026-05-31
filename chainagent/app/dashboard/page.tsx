@@ -216,7 +216,7 @@ function OverviewSection({brand,orders,onRunAgent,onViewAllReorders}:{brand:Bran
         ))}
       </div>
       <Panel>
-        <PanelHeader title={<>📊 Live SKU Risk Monitor <BeHook>← /api/inventory</BeHook></>} actions={<Btn variant="primary" onClick={onRunAgent}>▶ Run Agent</Btn>}/>
+        <PanelHeader title="📊 Live SKU Risk Monitor" actions={<Btn variant="primary" onClick={onRunAgent}>▶ Run Agent</Btn>}/>
         <RowHead cols="2fr 70px 85px 75px 120px 95px 105px"><Th>Product</Th><Th>Stock</Th><Th>Incoming</Th><Th>Velocity</Th><Th>Runway</Th><Th>Risk</Th><Th>Agent</Th></RowHead>
         {brand.skus.map(sku=><SkuRow key={sku.id} sku={sku} cols="2fr 70px 85px 75px 120px 95px 105px" isOverview/>)}
       </Panel>
@@ -602,6 +602,54 @@ const PO_STATUS_LABEL: Record<PurchaseOrder["status"],string> = {
   "sent":"Sent","confirmed":"Confirmed","in-transit":"In Transit","received":"Received"
 }
 
+interface SnowflakeRow { timestamp: string; sku_id: string; sku_name: string; days_left: number; reasoning: string; email_draft: string; status: string }
+
+function AgentInquiriesPanel() {
+  const [rows, setRows]       = useState<SnowflakeRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState("")
+  const [expanded, setExpanded] = useState<number | null>(null)
+
+  useEffect(()=>{
+    fetch("/api/snowflake-logs")
+      .then(r=>r.json())
+      .then(d=>{ if(d.error) setError(d.error); setRows(d.rows ?? []) })
+      .catch(()=>setError("Failed to reach backend"))
+      .finally(()=>setLoading(false))
+  },[])
+
+  function fmtTs(ts: string) {
+    try { return new Date(ts).toLocaleString("en-US",{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}) }
+    catch { return ts }
+  }
+
+  if(loading) return <div style={{...S.mono,fontSize:11,color:"var(--muted)",textAlign:"center" as const,padding:"32px 0"}}>Loading from Snowflake…</div>
+  if(error)   return <div style={{...S.mono,fontSize:11,color:"var(--red)",textAlign:"center" as const,padding:"32px 0"}}>Error: {error}</div>
+  if(rows.length===0) return <div style={{...S.mono,fontSize:11,color:"var(--muted)",textAlign:"center" as const,padding:"32px 0"}}>No agent inquiries logged yet.</div>
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:0}}>
+      <RowHead cols="130px 1fr 70px 40px"><Th>Time</Th><Th>SKU</Th><Th>Days Left</Th><Th/></RowHead>
+      {rows.map((r,i)=>(
+        <div key={i}>
+          <div onClick={()=>setExpanded(expanded===i?null:i)} style={{display:"grid",gridTemplateColumns:"130px 1fr 70px 40px",gap:10,padding:"11px 18px",borderBottom:"1px solid var(--border)",alignItems:"center",cursor:"pointer",background:expanded===i?"var(--surface2)":"transparent"}}>
+            <div style={{...S.mono,fontSize:10,color:"var(--muted)"}}>{fmtTs(r.timestamp)}</div>
+            <div><div style={{fontSize:12,color:"var(--text)"}}>{r.sku_name}</div><div style={{...S.mono,fontSize:9,color:"var(--muted)"}}>{r.sku_id}</div></div>
+            <div style={{...S.mono,fontSize:12,color:r.days_left<7?"var(--red)":r.days_left<14?"#f59e0b":"var(--accent)"}}>{r.days_left?.toFixed(1)}d</div>
+            <div style={{...S.mono,fontSize:11,color:"var(--muted)",textAlign:"center" as const}}>{expanded===i?"▲":"▼"}</div>
+          </div>
+          {expanded===i&&(
+            <div style={{background:"var(--surface2)",borderBottom:"1px solid var(--border)",padding:"14px 18px",display:"flex",flexDirection:"column",gap:12}}>
+              <div><div style={{...S.mono,fontSize:10,color:"var(--muted)",marginBottom:4}}>GEMINI REASONING</div><div style={{fontSize:12,color:"var(--text)",lineHeight:1.7,whiteSpace:"pre-wrap"}}>{r.reasoning||"—"}</div></div>
+              <div><div style={{...S.mono,fontSize:10,color:"var(--muted)",marginBottom:4}}>EMAIL DRAFT</div><div style={{fontSize:12,color:"var(--text)",lineHeight:1.7,whiteSpace:"pre-wrap",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:8,padding:"10px 12px"}}>{r.email_draft||"—"}</div></div>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function OrderHistorySection({orders, auditRows, inbounds, onUpdateOrder}:{orders:PurchaseOrder[], auditRows:AuditRow[], inbounds:StockInbound[], onUpdateOrder:(ref:string, status:PurchaseOrder["status"])=>void}) {
   const pillType = (s:PurchaseOrder["status"]):React.ComponentProps<typeof StatusPill>["type"] =>
     s==="received"?"live":s==="in-transit"?"transit":s==="confirmed"?"pending":"draft"
@@ -617,9 +665,34 @@ function OrderHistorySection({orders, auditRows, inbounds, onUpdateOrder}:{order
 
   const isEmpty = orders.length===0 && auditRows.length===0 && inbounds.length===0
 
+  const tabBtnStyle = (active: boolean) => ({
+    ...S.mono, fontSize:11, padding:"5px 14px", borderRadius:6, border:"1px solid var(--border)",
+    background: active ? "var(--accent)" : "transparent",
+    color: active ? "#000" : "var(--muted)", cursor:"pointer" as const,
+  })
+
   return (
     <>
-      <SectionHeader eyebrow="// agent orders" title="Agent Orders" action={<Btn onClick={exportCSV}>↓ Export CSV</Btn>}/>
+      <SectionHeader
+        eyebrow="// agent orders"
+        title={activeTab==="orders" ? "Agent Orders" : "Agent Inquiries"}
+        action={
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            {activeTab==="orders" && <>
+              <Btn onClick={exportCSV}>↓ Export CSV</Btn>
+              <Btn onClick={onClear} style={{color:"var(--muted)"}}>✕ Clear History</Btn>
+            </>}
+            <div style={{display:"flex",gap:4}}>
+              <button style={tabBtnStyle(activeTab==="orders")}    onClick={()=>setActiveTab("orders")}>Orders</button>
+              <button style={tabBtnStyle(activeTab==="inquiries")} onClick={()=>setActiveTab("inquiries")}>Inquiries</button>
+            </div>
+          </div>
+        }
+      />
+
+      {activeTab==="inquiries" ? (
+        <Panel><AgentInquiriesPanel/></Panel>
+      ) : <>
 
       {/* Purchase Orders */}
       <Panel>
@@ -687,47 +760,58 @@ function OrderHistorySection({orders, auditRows, inbounds, onUpdateOrder}:{order
           ))}
         </>}
       </Panel>
+      </>}
     </>
   )
 }
 
 function NotificationsSection() {
-  const staticChannels = [
-    {icon:"💬",bg:"#4A154B",name:"Slack",sub:"Connected · #chainagent-alerts",on:true,preview:"🚨 ChainAgent: Portland Aviator Pro 8.9 days stock. Lead 21 days. Reorder drafted 800 units. Approve →"},
-    {icon:"📧",bg:"#EA4335",name:"Email",sub:"founder@portlandoptics.com",on:true,preview:"[ChainAgent] Action Required — Portland Aviator Pro stockout in 8.9 days. Reorder awaiting approval."},
-    {icon:"🔊",bg:"var(--accent-dim)",name:"Voice Alert",sub:"ElevenLabs · Rachel",on:true,preview:"\"Portland Aviator Pro has 8 days of stock. Lead time is 21 days. I've drafted a reorder for 800 units. Awaiting your approval.\""},
-  ]
-  const [states, setStates] = useState(staticChannels.map(c=>c.on))
 
-  // SMS state — persisted via backend
-  const [smsEnabled, setSmsEnabled] = useState(false)
-  const [smsPhone, setSmsPhone]     = useState("")
-  const [smsSaving, setSmsSaving]   = useState(false)
-  const [smsSaved,  setSmsSaved]    = useState(false)
+  // Email state — persisted via backend
+  const [emailEnabled, setEmailEnabled] = useState(false)
+  const [emailAddr, setEmailAddr]       = useState("")
+  const [emailSaving, setEmailSaving]   = useState(false)
+  const [emailSaved,  setEmailSaved]    = useState(false)
+  const [emailTesting, setEmailTesting] = useState(false)
+  const [emailTestMsg, setEmailTestMsg] = useState("")
 
   useEffect(()=>{
-    fetch("/api/sms-config").then(r=>r.json()).then(d=>{
-      setSmsEnabled(d.enabled ?? false)
-      setSmsPhone(d.phone ?? "")
+    fetch("/api/email-config").then(r=>r.json()).then(d=>{
+      setEmailEnabled(d.enabled ?? false)
+      setEmailAddr(d.email ?? "")
     }).catch(()=>{})
   },[])
 
-  async function saveSmsConfig(enabled: boolean, phone: string) {
-    setSmsSaving(true); setSmsSaved(false)
+  async function saveEmailConfig(enabled: boolean, email: string) {
+    setEmailSaving(true); setEmailSaved(false)
     try {
-      await fetch("/api/sms-config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled,phone})})
-      setSmsSaved(true)
-      setTimeout(()=>setSmsSaved(false),2000)
-    } finally { setSmsSaving(false) }
+      await fetch("/api/email-config",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({enabled,email})})
+      setEmailSaved(true)
+      setTimeout(()=>setEmailSaved(false),2000)
+    } finally { setEmailSaving(false) }
   }
 
-  function handleSmsToggle(v: boolean) {
-    setSmsEnabled(v)
-    saveSmsConfig(v, smsPhone)
+  function handleEmailToggle(v: boolean) {
+    setEmailEnabled(v)
+    saveEmailConfig(v, emailAddr)
   }
 
-  function handlePhoneSave() {
-    saveSmsConfig(smsEnabled, smsPhone)
+  function handleEmailSave() {
+    saveEmailConfig(emailEnabled, emailAddr)
+  }
+
+  async function handleEmailTest() {
+    setEmailTesting(true); setEmailTestMsg("")
+    try {
+      const res = await fetch("/api/email-test", { method: "POST" })
+      const data = await res.json()
+      setEmailTestMsg(data.status === "sent" ? "Sent ✓" : `Error: ${data.detail}`)
+    } catch {
+      setEmailTestMsg("Error: request failed")
+    } finally {
+      setEmailTesting(false)
+      setTimeout(() => setEmailTestMsg(""), 4000)
+    }
   }
 
   return (
@@ -736,52 +820,150 @@ function NotificationsSection() {
       <Panel>
         <PanelHeader title="🔔 Notification Channels"/>
         <div style={{padding:16,display:"flex",flexDirection:"column",gap:10}}>
-          {staticChannels.map((c,i)=>(
-            <div key={i} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:10,padding:"12px 14px"}}>
-              <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:8}}>
-                <div style={{width:28,height:28,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,background:c.bg,flexShrink:0}}>{c.icon}</div>
-                <div style={{flex:1}}><div style={{fontSize:12,fontWeight:500,color:"var(--text)"}}>{c.name}</div><div style={{...S.mono,fontSize:10,color:"var(--muted)"}}>{c.sub}</div></div>
-                <Toggle on={states[i]} onChange={v=>setStates(s=>{const n=[...s];n[i]=v;return n})}/>
-              </div>
-              <div style={{fontSize:11,color:"var(--muted2)",lineHeight:1.6,borderTop:"1px solid var(--border)",paddingTop:8}}><strong>Preview:</strong> {c.preview}</div>
-            </div>
-          ))}
-
-          {/* SMS — live Twilio integration */}
-          <div style={{background:"var(--surface2)",border:`1px solid ${smsEnabled?"rgba(37,211,102,0.25)":"var(--border)"}`,borderRadius:10,padding:"12px 14px"}}>
+          {/* Email — live SendGrid integration */}
+          <div style={{background:"var(--surface2)",border:`1px solid ${emailEnabled?"rgba(37,211,102,0.25)":"var(--border)"}`,borderRadius:10,padding:"12px 14px"}}>
             <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:8}}>
-              <div style={{width:28,height:28,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,background:"#25D366",flexShrink:0}}>📱</div>
+              <div style={{width:28,height:28,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,background:"#EA4335",flexShrink:0}}>📧</div>
               <div style={{flex:1}}>
-                <div style={{fontSize:12,fontWeight:500,color:"var(--text)"}}>SMS</div>
-                <div style={{...S.mono,fontSize:10,color:smsEnabled?"var(--accent)":"var(--muted)"}}>
-                  {smsEnabled ? (smsPhone ? `● ${smsPhone}` : "● Enabled · no phone set") : "◌ via Twilio API"}
+                <div style={{fontSize:12,fontWeight:500,color:"var(--text)"}}>Email Alerts</div>
+                <div style={{...S.mono,fontSize:10,color:emailEnabled?"var(--accent)":"var(--muted)"}}>
+                  {emailEnabled ? (emailAddr ? `● ${emailAddr}` : "● Enabled · no email set") : "◌ via SendGrid"}
                 </div>
               </div>
-              <Toggle on={smsEnabled} onChange={handleSmsToggle}/>
+              <Toggle on={emailEnabled} onChange={handleEmailToggle}/>
             </div>
             <div style={{fontSize:11,color:"var(--muted2)",lineHeight:1.6,borderTop:"1px solid var(--border)",paddingTop:8}}>
-              <strong>Preview:</strong> ChainAgent: ⚠ Portland Aviator Pro — 8.9 days left. Reorder drafted. Log in to approve.
+              <strong>Preview:</strong> [ChainAgent] Action Required — Portland Aviator Pro stockout in 8.9 days. Reorder awaiting approval.
             </div>
             <div style={{marginTop:10,display:"flex",gap:7,alignItems:"center"}}>
               <input
-                type="tel"
-                placeholder="+1 555 000 0000"
-                value={smsPhone}
-                onChange={e=>setSmsPhone(e.target.value)}
+                type="email"
+                placeholder="you@example.com"
+                value={emailAddr}
+                onChange={e=>setEmailAddr(e.target.value)}
                 style={{...S.mono,flex:1,background:"var(--surface)",border:"1px solid var(--border2)",borderRadius:6,padding:"6px 10px",color:"var(--text)",fontSize:11,outline:"none"}}
               />
-              <Btn onClick={handlePhoneSave} disabled={smsSaving} style={{fontSize:10,padding:"6px 12px",opacity:smsSaving?0.6:1}}>
-                {smsSaving?"Saving…":smsSaved?"Saved ✓":"Save"}
+              <Btn onClick={handleEmailSave} disabled={emailSaving} style={{fontSize:10,padding:"6px 12px",opacity:emailSaving?0.6:1}}>
+                {emailSaving?"Saving…":emailSaved?"Saved ✓":"Save"}
               </Btn>
-            </div>
-            <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginTop:6}}>
-              Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM in .env
             </div>
           </div>
 
-          <Btn style={{width:"100%",justifyContent:"center",padding:10}}>📤 Send test notification</Btn>
+          <div style={{display:"flex",flexDirection:"column",gap:4}}>
+            <Btn onClick={handleEmailTest} disabled={emailTesting} style={{width:"100%",justifyContent:"center",padding:10,opacity:emailTesting?0.6:1}}>
+              {emailTesting ? "Sending…" : "📤 Send test notification"}
+            </Btn>
+            {emailTestMsg && <div style={{...S.mono,fontSize:10,textAlign:"center",color:emailTestMsg.startsWith("Error")?"var(--red)":"var(--accent)"}}>{emailTestMsg}</div>}
+          </div>
         </div>
       </Panel>
+    </>
+  )
+}
+
+// ── API KEYS PANEL ──
+const API_SERVICES = [
+  { id:"gemini",     label:"Gemini",     fields:[
+    {key:"gemini_api_key",    label:"API Key",   secret:true,  placeholder:"AIza..."},
+    {key:"gemini_model",      label:"Model",     secret:false, placeholder:"gemini-2.5-flash"},
+  ]},
+  { id:"elevenlabs", label:"ElevenLabs", fields:[
+    {key:"elevenlabs_api_key",  label:"API Key",  secret:true,  placeholder:"sk_..."},
+    {key:"elevenlabs_voice_id", label:"Voice ID", secret:false, placeholder:"21m00Tcm4TlvDq8ikWAM"},
+  ]},
+  { id:"snowflake",  label:"Snowflake",  fields:[
+    {key:"snowflake_user",     label:"User",     secret:false, placeholder:"MY_USER"},
+    {key:"snowflake_password", label:"Password", secret:true,  placeholder:"••••••••"},
+    {key:"snowflake_account",  label:"Account",  secret:false, placeholder:"abc12345.us-east-1"},
+  ]},
+  { id:"sendgrid",   label:"SendGrid",   fields:[
+    {key:"sendgrid_api_key", label:"API Key",     secret:true,  placeholder:"SG...."},
+    {key:"email_from",       label:"From Email",  secret:false, placeholder:"alerts@yourdomain.com"},
+  ]},
+] as const
+
+type KeyField = typeof API_SERVICES[number]["fields"][number]
+
+function ApiKeysPanel() {
+  const [status, setStatus]   = useState<Record<string,boolean>>({})
+  const [open, setOpen]       = useState<string|null>(null)
+  const [drafts, setDrafts]   = useState<Record<string,string>>({})
+  const [saving, setSaving]   = useState(false)
+  const [saved,  setSavedKey] = useState<string|null>(null)
+
+  useEffect(()=>{
+    fetch("/api/api-keys").then(r=>r.json()).then(setStatus).catch(()=>{})
+  },[])
+
+  function isConnected(svc: typeof API_SERVICES[number]) {
+    return svc.fields.every(f => status[f.key])
+  }
+
+  async function handleSave(svc: typeof API_SERVICES[number]) {
+    setSaving(true)
+    const body: Record<string,string> = {}
+    svc.fields.forEach(f => { if(drafts[f.key]!=null) body[f.key] = drafts[f.key] })
+    await fetch("/api/api-keys", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) })
+    const fresh = await fetch("/api/api-keys").then(r=>r.json())
+    setStatus(fresh)
+    setSaving(false)
+    setSavedKey(svc.id)
+    setTimeout(()=>setSavedKey(null), 2000)
+    setOpen(null)
+  }
+
+  const inp = {
+    ...S.mono, fontSize:11, background:"var(--surface)", border:"1px solid var(--border2)",
+    borderRadius:6, padding:"7px 10px", color:"var(--text)", outline:"none", width:"100%",
+  } as React.CSSProperties
+
+  return (
+    <>
+      {API_SERVICES.map(svc=>{
+        const connected = isConnected(svc)
+        const isOpen    = open === svc.id
+        return (
+          <div key={svc.id} style={{background:"var(--surface2)",borderRadius:10,border:`1px solid ${connected?"rgba(0,229,160,0.2)":"var(--border)"}`,overflow:"hidden"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 13px"}}>
+              <div>
+                <div style={{fontSize:13,color:"var(--text)"}}>{svc.label}</div>
+                <div style={{...S.mono,fontSize:10,marginTop:1,color:connected?"var(--accent)":"var(--muted)"}}>
+                  {connected ? "● Connected" : "◌ Not configured"}
+                </div>
+              </div>
+              <Btn variant={connected?"ghost":"primary"} style={{fontSize:10,padding:"5px 12px"}}
+                onClick={()=>setOpen(isOpen?null:svc.id)}>
+                {saved===svc.id ? "Saved ✓" : connected ? "Update Keys" : "Configure"}
+              </Btn>
+            </div>
+            {isOpen&&(
+              <div style={{borderTop:"1px solid var(--border)",padding:"14px 13px",display:"flex",flexDirection:"column",gap:10}}>
+                <div style={{display:"grid",gridTemplateColumns:`repeat(${Math.min(svc.fields.length,2)},1fr)`,gap:9}}>
+                  {svc.fields.map((f: KeyField)=>(
+                    <div key={f.key}>
+                      <div style={{...S.mono,fontSize:10,color:"var(--muted)",marginBottom:4}}>
+                        {f.label}{status[f.key]&&<span style={{color:"var(--accent)",marginLeft:6}}>● set</span>}
+                      </div>
+                      <input
+                        type={f.secret?"password":"text"}
+                        placeholder={status[f.key]?"••••••••":f.placeholder}
+                        value={drafts[f.key]??""}
+                        onChange={e=>setDrafts(d=>({...d,[f.key]:e.target.value}))}
+                        style={inp}
+                      />
+                    </div>
+                  ))}
+                </div>
+                <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                  <Btn variant="primary" style={{fontSize:11,padding:"7px 16px"}} onClick={()=>handleSave(svc)} disabled={saving}>
+                    {saving?"Saving…":"Save"}
+                  </Btn>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })}
     </>
   )
 }
@@ -887,7 +1069,7 @@ function SettingsSection({agentSettings, onSaveSettings}:{agentSettings:AgentSet
         </div>
       </Panel>
       <Panel>
-        <PanelHeader title={<>🔌 API Connections <BeHook>← .env.local</BeHook></>}/>
+        <PanelHeader title="🔌 API Connections"/>
         <div style={{padding:16,display:"flex",flexDirection:"column",gap:8}}>
 
           {/* ── Shopify — live connection ── */}
@@ -927,25 +1109,14 @@ function SettingsSection({agentSettings, onSaveSettings}:{agentSettings:AgentSet
                     {shopifyPhase==="saving"?"Testing…":shopifyPhase==="ok"?"✓ Connected":shopifyPhase==="err"?"Retry":"Test & Save"}
                   </Btn>
                   <div style={{...S.mono,fontSize:10,color:"var(--muted)"}}>
-                    Needs <code style={{background:"var(--surface3)",padding:"1px 5px",borderRadius:3}}>read_products</code> + <code style={{background:"var(--surface3)",padding:"1px 5px",borderRadius:3}}>read_inventory</code> scopes
                   </div>
                 </div>
               </div>
             )}
           </div>
 
-          {/* ── Other static integrations ── */}
-          {[
-            {name:"Claude API",  sub:"● Connected",                subColor:"var(--accent)", action:"Update Key"},
-            {name:"ElevenLabs",  sub:"● Connected",                subColor:"var(--accent)", action:"Update Key"},
-            {name:"Snowflake",   sub:"◎ Pending setup",            subColor:"var(--amber)",  action:"Connect", primary:true},
-            {name:"Gemini Vision",sub:"● Connected · PDF parsing", subColor:"var(--accent)", action:"Update Key"},
-          ].map(({name,sub,subColor,action,primary})=>(
-            <div key={name} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 13px",background:"var(--surface2)",borderRadius:10,border:"1px solid var(--border)"}}>
-              <div><div style={{fontSize:13,color:"var(--text)"}}>{name}</div><div style={{...S.mono,fontSize:10,color:subColor,marginTop:1}}>{sub}</div></div>
-              <Btn variant={primary?"primary":"ghost"} style={{fontSize:10,padding:"5px 12px"}}>{action}</Btn>
-            </div>
-          ))}
+          {/* ── API key integrations ── */}
+          <ApiKeysPanel/>
         </div>
       </Panel>
     </>
@@ -995,14 +1166,18 @@ function AgentSection({brand,supplierEmail,supplierName,reorderQty,agentRunning,
             <div key={i} className="trace-line" style={{display:"flex",gap:9,alignItems:"flex-start",...S.mono,fontSize:11,lineHeight:1.7}}>
               <span style={{color:"var(--muted)",flexShrink:0,fontSize:10,paddingTop:1}}>{l.time}</span>
               <span style={{fontSize:9,fontWeight:500,padding:"2px 6px",borderRadius:3,flexShrink:0,minWidth:48,textAlign:"center" as const,marginTop:2,...tagStyle(l.tag)}}>{l.tag}</span>
-              <span style={{color:"var(--text)"}}>{l.msg}</span>
+              <span style={{color:"var(--text)"}}>
+                {l.tag==="REORDER"
+                  ? (() => { try { const r=JSON.parse(l.msg); return `Reorder queued · ${r.name} · ${r.qty?.toLocaleString()} units → ${r.supplier}` } catch { return l.msg } })()
+                  : l.msg}
+              </span>
             </div>
           ))}
         </div>
       </div>
       {showEmail&&(
         <div className="email-panel" style={{background:"var(--surface)",border:"1px solid var(--border)",borderLeft:"3px solid var(--accent)",borderRadius:14,overflow:"hidden"}}>
-          <PanelHeader title={<>📧 AI-Drafted Supplier Email <BeHook>← gemini</BeHook></>}/>
+          <PanelHeader title="📧 AI-Drafted Supplier Email"/>
           <div style={{padding:"12px 18px",borderBottom:"1px solid var(--border)"}}>
             <div style={{display:"flex",gap:10,...S.mono,fontSize:12,padding:"4px 0"}}>
               <span style={{color:"var(--muted)",minWidth:55}}>To:</span>
@@ -1078,9 +1253,9 @@ export default function Dashboard() {
   const [syncPhase, setSyncPhase] = useState<"idle"|"syncing"|"done">("idle")
   const [agentSettings, setAgentSettings] = useState({
     autoApprove: false, scheduleEnabled: false,
-    scheduleIntervalMins: 30, autoSendWindowMins: 120, riskThresholdDays: 14,
+    scheduleIntervalMins: 0.5, autoSendWindowMins: 120, riskThresholdDays: 14,
   })
-  const [scheduleSecs, setScheduleSecs] = useState(30 * 60)
+  const [scheduleSecs, setScheduleSecs] = useState(30)
   const [cdSecs, setCdSecs]       = useState(120 * 60)
   const [liveSkus, setLiveSkus]   = useState<RawSKU[] | "error" | null>(null)
   const [auditRows, setAuditRows] = useState<AuditRow[]>([])
@@ -1122,6 +1297,8 @@ export default function Dashboard() {
         if(saved.autoSendWindowHrs!=null && saved.autoSendWindowMins==null) saved.autoSendWindowMins = saved.autoSendWindowHrs * 60
         setAgentSettings(s=>({...s,...saved}))
       }
+      const rawSection = localStorage.getItem(`chainagent:${userKey}:section`)
+      if(rawSection) setSection(rawSection)
       const rawOrders = localStorage.getItem(`chainagent:${userKey}:orders`)
       if(rawOrders) setOrders(JSON.parse(rawOrders))
       const rawAudit = localStorage.getItem(`chainagent:${userKey}:auditRows`)
@@ -1138,6 +1315,7 @@ export default function Dashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[userKey])
 
+  useEffect(()=>{ try { localStorage.setItem(`chainagent:${userKey}:section`, section) } catch {} },[userKey, section])
   useEffect(()=>{ try { localStorage.setItem(`chainagent:${userKey}:agentSettings`, JSON.stringify(agentSettings)) } catch {} },[userKey, agentSettings])
   useEffect(()=>{ try { localStorage.setItem(`chainagent:${userKey}:orders`, JSON.stringify(orders)) } catch {} },[userKey, orders])
   useEffect(()=>{ try { localStorage.setItem(`chainagent:${userKey}:auditRows`, JSON.stringify(auditRows)) } catch {} },[userKey, auditRows])
@@ -1261,6 +1439,7 @@ export default function Dashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   },[showReply])
 
+
   // Countdown for email approval — auto-approves if setting is on
   useEffect(()=>{
     if(showEmail&&!emailResult){
@@ -1338,6 +1517,39 @@ export default function Dashboard() {
     }, 1200)
   },[syncPhase])
 
+  // Auto-resync every 10 seconds
+  useEffect(()=>{
+    const t = setInterval(handleResync, 10_000)
+    return ()=>clearInterval(t)
+  },[handleResync])
+
+  // ── Simulation ──
+  const [simRunning, setSimRunning] = useState(false)
+  const [simDay,     setSimDay]     = useState(0)
+  const simRef = useRef<ReturnType<typeof setInterval>|null>(null)
+
+  const tickSimDay = useCallback(async ()=>{
+    await fetch("/api/simulate-day", { method:"POST" })
+    setSimDay(d => d + 1)
+    handleResync()
+  }, [handleResync])
+
+  useEffect(()=>{
+    if(simRunning){
+      tickSimDay()
+      simRef.current = setInterval(tickSimDay, 10_000)
+    } else {
+      if(simRef.current) clearInterval(simRef.current)
+    }
+    return ()=>{ if(simRef.current) clearInterval(simRef.current) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[simRunning])
+
+  function toggleSim(){
+    if(simRunning){ setSimRunning(false) }
+    else { setSimDay(0); setSimRunning(true) }
+  }
+
   const navItems = [
     {id:"overview",    name:"Overview",       icon:"◈", label:"Monitor"},
     {id:"agent",       name:"Run Agent",      icon:"⚡", label:"Monitor"},
@@ -1409,6 +1621,12 @@ export default function Dashboard() {
           <div style={{...S.mono,fontSize:10,color:"var(--muted)",background:"var(--surface2)",padding:"4px 10px",borderRadius:100,border:"1px solid var(--border)",cursor:"pointer"}} onClick={()=>setSection("settings")}>
             Next run: {fmt(scheduleSecs)}
           </div>
+          <button onClick={toggleSim} style={{...S.mono,fontSize:10,padding:"5px 12px",borderRadius:100,cursor:"pointer",
+            border:simRunning?"1px solid rgba(245,158,11,0.4)":"1px solid var(--border)",
+            background:simRunning?"rgba(245,158,11,0.12)":"var(--surface2)",
+            color:simRunning?"#f59e0b":"var(--muted)"}}>
+            {simRunning?`⏱ Sim Day ${simDay}`:"⏱ Simulate"}
+          </button>
           <div style={{display:"flex",alignItems:"center",gap:6,...S.mono,fontSize:10,padding:"5px 12px",borderRadius:100,
             border:`1px solid ${backendOnline===false?"rgba(239,68,68,0.3)":backendOnline===null?"rgba(245,158,11,0.3)":"var(--accent-mid)"}`,
             background:backendOnline===false?"var(--red-dim)":backendOnline===null?"var(--amber-dim)":"var(--accent-dim)",
@@ -1419,8 +1637,20 @@ export default function Dashboard() {
         </div>
       </nav>
 
+      {/* SIMULATION BAR */}
+      {simRunning&&(
+        <div style={{position:"fixed",top:54,left:0,right:0,zIndex:40,background:simRunning?"#78350f":"#1c1917",borderBottom:"2px solid #f59e0b",padding:"6px 20px",display:"flex",alignItems:"center",gap:12,...S.mono,fontSize:11}}>
+          <span style={{color:"#f59e0b",fontWeight:700}}>⏱ SIM</span>
+          <span style={{color:"var(--text)"}}>Day <strong>{simDay}</strong> · 30s = 1 day · inventory depleting at real velocity</span>
+          <div style={{flex:1}}/>
+          <Btn onClick={toggleSim} style={{fontSize:10,padding:"3px 12px",background:simRunning?"rgba(239,68,68,0.2)":"rgba(34,197,94,0.15)",color:simRunning?"var(--red)":"var(--accent)",border:`1px solid ${simRunning?"rgba(239,68,68,0.4)":"rgba(34,197,94,0.3)"}`}}>
+            {simRunning?"■ Stop Sim":"▶ Resume"}
+          </Btn>
+        </div>
+      )}
+
       {/* LAYOUT */}
-      <div style={{display:"grid",gridTemplateColumns:"224px 1fr",minHeight:"100vh",paddingTop:54,position:"relative",zIndex:1}}>
+      <div style={{display:"grid",gridTemplateColumns:"224px 1fr",minHeight:"100vh",paddingTop:simRunning?88:54,position:"relative",zIndex:1}}>
 
         {/* SIDEBAR */}
         <aside style={{borderRight:"1px solid var(--border)",background:"var(--surface)",padding:"18px 0",position:"sticky",top:54,height:"calc(100vh - 54px)",overflowY:"auto",display:"flex",flexDirection:"column"}}>
