@@ -468,7 +468,7 @@ function SuppliersSection({suppliers, onAdd, onUpdate}:{suppliers:Supplier[], on
 
   return (
     <>
-      <SectionHeader eyebrow="// suppliers" title="Supplier Network"
+      <SectionHeader eyebrow="// suppliers" title="Suppliers"
         action={<Btn variant="primary" onClick={openAdd}>+ Add Supplier</Btn>}/>
       {suppliers.length === 0 ? (
         <div style={{...S.mono,fontSize:12,color:"var(--muted)",textAlign:"center" as const,padding:"48px 0"}}>
@@ -584,7 +584,7 @@ function OrderHistorySection({orders: initOrders, auditRows, pendingReorders}:{o
 
   return (
     <>
-      <SectionHeader eyebrow="// order history" title="Order History" action={<Btn onClick={exportCSV}>↓ Export CSV</Btn>}/>
+      <SectionHeader eyebrow="// agent orders" title="Agent Orders" action={<Btn onClick={exportCSV}>↓ Export CSV</Btn>}/>
 
       {/* Purchase Orders */}
       <Panel>
@@ -1293,7 +1293,7 @@ export default function Dashboard() {
     {id:"inbounds",    name:"Stock Inbounds", icon:"📥",label:"Monitor",badge:pendingReorders.length>0?String(pendingReorders.length):undefined,badgeColor:"amber"},
     {id:"orders",      name:"Orders",         icon:"📦",label:"Monitor"},
     {id:"suppliers",   name:"Suppliers",      icon:"◉", label:"Manage"},
-    {id:"history",     name:"Agent Order History",icon:"≡",label:"Manage",badge:auditRows.length>0?String(auditRows.length):undefined,badgeColor:"green"},
+    {id:"history",     name:"Agent Orders",icon:"≡",label:"Manage",badge:auditRows.length>0?String(auditRows.length):undefined,badgeColor:"green"},
     {id:"notifications",name:"Notifications", icon:"🔔",label:"Manage"},
     {id:"settings",    name:"Settings",       icon:"◎", label:"Manage"},
   ]
